@@ -141,13 +141,25 @@ Rezultat: Robot glatko izvršava trajektoriju kroz definirane točke.
 
 Launch datoteka automatski objavljuje niz testnih pozicija na `forward_position_controller`.
 
+**NAPOMENA:** Za ovaj zadatak `forward_position_controller` mora biti aktivan!
+
 **Terminal 1:**
 ```bash
 source install/setup.bash
 ros2 launch fanuc_m10ia_support fanuc_controllers.launch.py
 ```
 
-**Terminal 2:**
+**Terminal 2 - Provjera i aktivacija kontrolera:**
+```bash
+source install/setup.bash
+# Provjera statusa kontrolera
+ros2 control list_controllers
+
+# Ako je joint_trajectory_controller aktivan, prebaci na forward_position_controller
+ros2 control switch_controllers --deactivate joint_trajectory_controller --activate forward_position_controller
+```
+
+**Terminal 3 - Pokretanje automatskog testa:**
 ```bash
 source install/setup.bash
 ros2 launch fanuc_m10ia_support publish_forward_positions.launch.py
@@ -166,16 +178,37 @@ Rezultat: Robot automatski "skače" kroz sljedeće pozicije (svaka 2 sekunde):
 
 Launch datoteka automatski objavljuje testnu trajektoriju na `joint_trajectory_controller`.
 
+**NAPOMENA:** Za ovaj zadatak `joint_trajectory_controller` mora biti aktivan!
+
 **Terminal 1:**
 ```bash
 source install/setup.bash
 ros2 launch fanuc_m10ia_support fanuc_controllers.launch.py
 ```
 
-**Terminal 2:**
+**Terminal 2 - Provjera i aktivacija kontrolera:**
 ```bash
 source install/setup.bash
+# Provjera statusa kontrolera
+ros2 control list_controllers
+
+# Deaktivacija forward_position_controller i aktivacija joint_trajectory_controller
 ros2 control switch_controllers --deactivate forward_position_controller --activate joint_trajectory_controller
+
+# Provjera da je promjena uspješna
+ros2 control list_controllers
+```
+
+Očekivani ispis nakon promjene:
+```
+joint_state_broadcaster[joint_state_broadcaster/JointStateBroadcaster] active
+forward_position_controller[forward_command_controller/ForwardCommandController] inactive
+joint_trajectory_controller[joint_trajectory_controller/JointTrajectoryController] active
+```
+
+**Terminal 3 - Pokretanje automatskog testa:**
+```bash
+source install/setup.bash
 ros2 launch fanuc_m10ia_support publish_trajectory.launch.py
 ```
 
@@ -183,7 +216,7 @@ Rezultat: Robot glatko izvršava kompleksnu trajektoriju definiranu u skripti.
 
 ---
 
-## Korisne naredbe za provjeru iDebugGing
+## Korisne naredbe za provjeru i debugging
 
 ```bash
 # Popis svih dostupnih topica
@@ -212,6 +245,8 @@ Projekt koristi `mock_components/GenericSystem` plugin koji simulira hardversko 
 
 - **forward_position_controller**: Prima pozicijske naredbe i trenutačno ih postavlja. Nema interpolaciju.
 - **joint_trajectory_controller**: Prima trajektorijske naredbe putem action servera i izvršava glatke pokrete između točaka s kontrolom brzine.
+
+**VAŽNO:** Samo jedan od ova dva kontrolera može biti aktivan istovremeno! Prije testiranja zadatka 3 ili 4, obvezno provjeriti i po potrebi promijeniti aktivni kontroler.
 
 ### Konfiguracija
 
