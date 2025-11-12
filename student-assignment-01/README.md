@@ -1,240 +1,233 @@
-# Fanuc M10iA - ros2_control Mock Sustav
+# Zadaća 1 – ROS2 Control mock sustav za Fanuc M10iA robot
 
-Mock sustav za 6-DOF Fanuc M10iA robot implementiran s ros2_control okvirom.
+Ovaj repozitorij sadrži potpuno rješenje studentske zadaće za implementaciju mock ros2_control sustava industrijskog robota Fanuc M10iA s 6 stupnjeva slobode. Projekt uključuje vizualizaciju robota, ros2_control sučelje s dva različita kontrolera te automatizirane testove funkcionalnosti.
 
-## Preduvjeti
-
-- Ubuntu 22.04
-- ROS 2 Humble
-
-**Instalacija paketa:**
-```bash
-sudo apt update
-sudo apt install ros-humble-ros2-control ros-humble-ros2-controllers ros-humble-joint-state-publisher-gui ros-humble-robot-state-publisher ros-humble-xacro ros-humble-rviz2
-```
-
-## Instalacija
-
-```bash
-# Kreiranje workspace-a
-mkdir -p ~/ros2_ws/src
-cd ~/ros2_ws/src
-
-# Kloniranje repozitorija
-git clone https://github.com/KxHartl/projektiranje-autonomnih-sustava.git
-
-# Instalacija zavisnosti
-cd ~/ros2_ws
-rosdep update
-rosdep install --from-paths src --ignore-src -r -y
-
-# Build
-colcon build --symlink-install
-source ~/ros2_ws/install/setup.bash
-```
-
-**Dodajte u `~/.bashrc` za automatsko sourcing:**
-```bash
-echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
-```
-
-## Struktura
+## Struktura repozitorija
 
 ```
 student-assignment-01/
-├── config/
-│   └── fanuc_controllers.yaml      # Konfiguracija controllera
-├── launch/
-│   ├── view_robot.launch.py        # Launch 1: GUI vizualizacija
-│   ├── robot_controller.launch.py  # Launch 2: Controlleri
-│   ├── forward_position.launch.py  # Launch 3: Pozicije
-│   └── trajectory_control.launch.py # Launch 4: Trajektorije
-├── urdf/
-│   ├── fanuc_m10ia.urdf.xacro
-│   ├── fanuc_m10ia_macro.xacro
-│   └── fanuc.ros2_control.xacro
-└── meshes/visual/
+└── src/fanuc_m10ia_support/
+    ├── config/                       # YAML konfiguracije kontrolera
+    │   └── fanuc_controllers.yaml
+    ├── launch/                       # Launch datoteke za pokretanje sustava
+    │   ├── view_robot.launch.py
+    │   ├── fanuc_controllers.launch.py
+    │   ├── publish_forward_positions.launch.py
+    │   └── publish_trajectory.launch.py
+    ├── urdf/                         # Robot opisi i ros2_control definicije
+    │   ├── m10ia.xacro
+    │   ├── m10ia_macro.xacro
+    │   └── m10ia_ros2_control.xacro
+    ├── meshes/                       # 3D vizualni i kolizijski modeli
+    ├── rviz/                         # RViz konfiguracije
+    └── test/                         # Automatizirani testovi
+        ├── test_trajectory.py
+        └── forward_position_publisher.py
 ```
 
-## Pokretanje
+## Instalacija i priprema
 
-### 1. Vizualizacija s GUI kontrolom
+### 1. Preuzimanje repozitorija
 
 ```bash
-ros2 launch student-assignment-01 view_robot.launch.py
+git clone https://github.com/KxHartl/projektiranje-autonomnih-sustava.git
+cd projektiranje-autonomnih-sustava/student-assignment-01
 ```
 
-Pokreće RViz i GUI za ručno upravljanje zglobovima.
-
-### 2. Robot s controllerima
+### 2. Instalacija ovisnosti
 
 ```bash
-ros2 launch student-assignment-01 robot_controller.launch.py
+sudo apt update
+sudo apt install ros-humble-ros2-control \
+                 ros-humble-ros2-controllers \
+                 ros-humble-controller-manager \
+                 ros-humble-joint-state-publisher-gui \
+                 ros-humble-xacro \
+                 python3-pip
 ```
 
-Pokreće ros2_control mock sustav s controllerima:
-- `forward_position_controller` (aktivan)
-- `joint_trajectory_controller` (učitan, neaktivan)
-- `joint_state_broadcaster`
-
-**Provjera statusa:**
-```bash
-ros2 control list_controllers
-```
-
-**Prebacivanje controllera:**
-```bash
-# Na trajectory controller
-ros2 control switch_controllers --deactivate forward_position_controller --activate joint_trajectory_controller
-
-# Natrag na position controller
-ros2 control switch_controllers --deactivate joint_trajectory_controller --activate forward_position_controller
-```
-
-### 3. Slanje pozicija (forward_position_controller)
-
-**Prije:** Osigurajte da je Launch 2 pokrenut i `forward_position_controller` aktivan.
+### 3. Gradnja workspace-a
 
 ```bash
-# Terminal 2
-ros2 launch student-assignment-01 forward_position.launch.py
+colcon build
+source install/setup.bash
 ```
 
-**Ručno slanje:**
+## Pokretanje i testiranje
+
+### Zadatak 1: Vizualizacija robota s GUI upravljanjem
+
+Pokreće se vizualizacija robota u RViz-u s mogućnošću ručnog postavljanja pozicija zglobova putem GUI slidera, bez ros2_control sustava.
+
+**Terminal 1:**
 ```bash
-# Neutralna pozicija
-ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray "data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"
-
-# Testna pozicija
-ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, -0.3, 0.8, -0.2, 0.4, -0.1]"
+source install/setup.bash
+ros2 launch fanuc_m10ia_support view_robot.launch.py
 ```
 
-### 4. Slanje trajektorija (joint_trajectory_controller)
-
-**Prije:**
-1. Pokrenite Launch 2
-2. Prebacite na trajectory controller (vidjeti gore)
-
-```bash
-# Terminal 2
-ros2 launch student-assignment-01 trajectory_control.launch.py
-```
-
-**Ručno slanje trajektorije:**
-```bash
-ros2 topic pub /joint_trajectory_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory "{
-  joint_names: ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6'],
-  points: [
-    {positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], velocities: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], time_from_start: {sec: 0, nanosec: 0}},
-    {positions: [0.5, -0.5, 0.5, -0.5, 0.5, -0.5], velocities: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], time_from_start: {sec: 2, nanosec: 0}},
-    {positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], velocities: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], time_from_start: {sec: 4, nanosec: 0}}
-  ]
-}"
-```
-
-## Testiranje
-
-### Test 1: GUI vizualizacija
-```bash
-ros2 launch student-assignment-01 view_robot.launch.py
-```
-Očekivano: RViz + GUI klizači za zglobove
-
-### Test 2: Forward Position Controller
-```bash
-# Terminal 1
-ros2 launch student-assignment-01 robot_controller.launch.py
-
-# Terminal 2
-ros2 control list_controllers
-
-# Terminal 3
-ros2 launch student-assignment-01 forward_position.launch.py
-```
-Očekivano: Robot se kreće prema zadanim pozicijama (bez interpolacije)
-
-### Test 3: Joint Trajectory Controller
-```bash
-# Terminal 1
-ros2 launch student-assignment-01 robot_controller.launch.py
-
-# Terminal 2
-ros2 control switch_controllers --deactivate forward_position_controller --activate joint_trajectory_controller
-
-# Terminal 3
-ros2 launch student-assignment-01 trajectory_control.launch.py
-```
-Očekivano: Glatko kretanje s interpolacijom između točaka
-
-## Provjera sustava
-
-```bash
-# Topici
-ros2 topic list
-ros2 topic echo /joint_states
-
-# Controlleri
-ros2 control list_controllers
-ros2 control list_hardware_interfaces
-
-# Frekvencija
-ros2 topic hz /joint_states
-```
-
-## Česti problemi
-
-### Paket nije pronađen
-```bash
-cd ~/ros2_ws
-colcon build --symlink-install
-source ~/ros2_ws/install/setup.bash
-```
-
-### Controller se ne učitava
-Provjerite YAML konfiguraciju i imena zglobova:
-```bash
-cat ~/ros2_ws/src/student-assignment-01/config/fanuc_controllers.yaml
-ros2 control list_controller_types
-```
-
-### Robot se ne kreće
-- Provjerite status controllera: `ros2 control list_controllers`
-- Provjerite sučelja: `ros2 control list_hardware_interfaces`
-- Provjerite ograničenja zglobova u URDF-u
-
-### RViz ne prikazuje robota
-- Dodajte RobotModel display
-- Postavite Fixed Frame na "world" ili "base_link"
-- Provjerite: `ros2 topic echo /robot_description --once`
-
-### Mock hardware greška
-Provjerite xacro sintaksu:
-```bash
-xacro ~/ros2_ws/src/student-assignment-01/urdf/fanuc_m10ia.urdf.xacro > /tmp/robot.urdf
-check_urdf /tmp/robot.urdf
-```
-
-## Napomene
-
-**Mock sustav** simulira hardversko sučelje bez fizičkog robota - omogućuje testiranje algoritama i integracija bez hardvera.
-
-**Controlleri:**
-- `forward_position_controller` - direktno prosljeđivanje pozicija bez interpolacije
-- `joint_trajectory_controller` - glatko kretanje s interpolacijom i PID kontrolom (preporučeno)
-
-**Najbolje prakse:**
-- Uvijek sourcajte okruženje
-- Provjerite status controllera prije slanja naredbi
-- Koristite razumne vrijednosti (u radijanima)
-- Testirajte u malim koracima
-
-## Resursi
-
-- [ros2_control dokumentacija](https://control.ros.org/)
-- [Example 7: 6DOF robot](https://control.ros.org/humble/doc/ros2_control_demos/example_7/doc/userdoc.html)
-- [ros2_controllers](https://control.ros.org/humble/doc/ros2_controllers/doc/controllers_index.html)
+Rezultat: Otvara se RViz s 3D modelom robota i GUI prozorom za upravljanje zglobovima.
 
 ---
 
-**Projekt:** Projektiranje autonomnih sustava  
-**GitHub:** https://github.com/KxHartl/projektiranje-autonomnih-sustava
+### Zadatak 2: Pokretanje s ros2_control kontrolerima
+
+Pokreće se mock ros2_control sustav s dva kontrolera:
+- `forward_position_controller` (aktivan)
+- `joint_trajectory_controller` (učitan, neaktivan)
+
+**Terminal 1:**
+```bash
+source install/setup.bash
+ros2 launch fanuc_m10ia_support fanuc_controllers.launch.py
+```
+
+#### Ručno testiranje forward_position_controller
+
+**Terminal 2:**
+```bash
+source install/setup.bash
+ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray "data: [0.0, 0.5, 0.0, 0.0, 0.0, 0.0]" --once
+```
+
+Rezultat: Robot trenutačno "skoči" na zadanu poziciju.
+
+#### Praćenje stanja zglobova
+
+**Terminal 2:**
+```bash
+ros2 topic echo /joint_states
+```
+
+#### Provjera statusa kontrolera
+
+**Terminal 2:**
+```bash
+ros2 control list_controllers
+```
+
+Očekivani ispis:
+```
+joint_state_broadcaster[joint_state_broadcaster/JointStateBroadcaster] active
+forward_position_controller[forward_command_controller/ForwardCommandController] active
+joint_trajectory_controller[joint_trajectory_controller/JointTrajectoryController] inactive
+```
+
+#### Prebacivanje između kontrolera
+
+**Terminal 2:**
+```bash
+# Deaktivirati forward_position_controller i aktivirati joint_trajectory_controller
+ros2 control switch_controllers --deactivate forward_position_controller --activate joint_trajectory_controller
+
+# Povratak na forward_position_controller
+ros2 control switch_controllers --deactivate joint_trajectory_controller --activate forward_position_controller
+```
+
+#### Testiranje joint_trajectory_controller
+
+**Terminal 2:**
+```bash
+source install/setup.bash
+ros2 control switch_controllers --deactivate forward_position_controller --activate joint_trajectory_controller
+cd src/fanuc_m10ia_support/test
+python3 test_trajectory.py
+```
+
+Rezultat: Robot glatko izvršava trajektoriju kroz definirane točke.
+
+---
+
+### Zadatak 3: Automatsko objavljivanje pozicija (forward_position_controller)
+
+Launch datoteka automatski objavljuje niz testnih pozicija na `forward_position_controller`.
+
+**Terminal 1:**
+```bash
+source install/setup.bash
+ros2 launch fanuc_m10ia_support fanuc_controllers.launch.py
+```
+
+**Terminal 2:**
+```bash
+source install/setup.bash
+ros2 launch fanuc_m10ia_support publish_forward_positions.launch.py
+```
+
+Rezultat: Robot automatski "skače" kroz sljedeće pozicije (svaka 2 sekunde):
+- [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+- [0.0, 0.5, 0.0, 0.0, 0.0, 0.0]
+- [1.0, 0.5, 0.0, 0.0, 0.0, 0.0]
+- [0.5, 0.3, -0.2, 0.0, 0.5, 0.0]
+- [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+---
+
+### Zadatak 4: Automatsko objavljivanje trajektorija (joint_trajectory_controller)
+
+Launch datoteka automatski objavljuje testnu trajektoriju na `joint_trajectory_controller`.
+
+**Terminal 1:**
+```bash
+source install/setup.bash
+ros2 launch fanuc_m10ia_support fanuc_controllers.launch.py
+```
+
+**Terminal 2:**
+```bash
+source install/setup.bash
+ros2 control switch_controllers --deactivate forward_position_controller --activate joint_trajectory_controller
+ros2 launch fanuc_m10ia_support publish_trajectory.launch.py
+```
+
+Rezultat: Robot glatko izvršava kompleksnu trajektoriju definiranu u skripti.
+
+---
+
+## Korisne naredbe za provjeru iDebugGing
+
+```bash
+# Popis svih dostupnih topica
+ros2 topic list
+
+# Praćenje trenutnih pozicija zglobova
+ros2 topic echo /joint_states
+
+# Provjera dostupnih kontrolera i njihovog stanja
+ros2 control list_controllers
+
+# Popis svih hardverskih sučelja
+ros2 control list_hardware_interfaces
+
+# Provjera transformacija između frame-ova
+ros2 run tf2_ros tf2_echo base_link tool0
+```
+
+## Tehnički detalji
+
+### Mock hardware sustav
+
+Projekt koristi `mock_components/GenericSystem` plugin koji simulira hardversko sučelje robota bez potrebe za stvarnim hardverom. Konfiguracija se nalazi u `urdf/m10ia_ros2_control.xacro`.
+
+### Kontroleri
+
+- **forward_position_controller**: Prima pozicijske naredbe i trenutačno ih postavlja. Nema interpolaciju.
+- **joint_trajectory_controller**: Prima trajektorijske naredbe putem action servera i izvršava glatke pokrete između točaka s kontrolom brzine.
+
+### Konfiguracija
+
+Sva konfiguracija kontrolera nalazi se u `config/fanuc_controllers.yaml` koji definira:
+- Update rate sustava (100 Hz)
+- Tipove kontrolera
+- Zglobove kojima upravlja svaki kontroler
+- Command i state sučelja
+
+## Reference
+
+- [ROS2 Control dokumentacija](https://control.ros.org/)
+- [Example 7: Full tutorial with a 6DOF robot](https://control.ros.org/humble/doc/ros2_control_demos/example_7/doc/userdoc.html)
+- [Mock Components](https://control.ros.org/humble/doc/ros2_control/hardware_interface/doc/mock_components_userdoc.html)
+
+## Autor
+
+Krešimir Hartl  
+Repozitorij: https://github.com/KxHartl/projektiranje-autonomnih-sustava
