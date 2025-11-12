@@ -1,5 +1,8 @@
 <?xml version="1.0" ?>
 <robot name="fanuc_m10ia" xmlns:xacro="http://wiki.ros.org/xacro">
   <xacro:include filename="$(find fanuc_m10ia_support)/urdf/m10ia_macro.xacro"/>
+  <xacro:include filename="$(find fanuc_m10ia_support)/urdf/m10ia_ros2_control.xacro"/>
+  
   <xacro:fanuc_m10ia prefix=""/>
+  <xacro:m10ia_ros2_control prefix="" use_mock_hardware="true"/>
 </robot>
