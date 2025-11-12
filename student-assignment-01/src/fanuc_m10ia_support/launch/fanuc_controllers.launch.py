@@ -5,17 +5,19 @@ from launch_ros.actions import Node
 from launch.substitutions import Command, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.parameter_descriptions import ParameterValue
-import os
 
 
 def generate_launch_description():
     # Putanje do potrebnih datoteka
-    pkg_share = FindPackageShare('fanuc_m10ia_support').find('fanuc_m10ia_support')
     urdf_file = PathJoinSubstitution(
         [FindPackageShare('fanuc_m10ia_support'), 'urdf', 'm10ia.xacro']
     )
-    controllers_file = os.path.join(pkg_share, 'config', 'fanuc_controllers.yaml')
-    rviz_config_file = os.path.join(pkg_share, 'rviz', 'view_robot.rviz')
+    controllers_file = PathJoinSubstitution(
+        [FindPackageShare('fanuc_m10ia_support'), 'config', 'fanuc_controllers.yaml']
+    )
+    rviz_config_file = PathJoinSubstitution(
+        [FindPackageShare('fanuc_m10ia_support'), 'rviz', 'view_robot.rviz']
+    )
     
     # Robot description
     robot_description_content = Command(['xacro ', urdf_file])
