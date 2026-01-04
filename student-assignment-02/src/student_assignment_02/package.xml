@@ -3,12 +3,11 @@
 <package format="3">
   <name>student_assignment_02</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>ROS2 package for autonomous system mapping and path planning using Stage simulator</description>
   <maintainer email="kh239762@fsb.hr">khartl</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
 
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
@@ -20,6 +19,10 @@
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>std_srvs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>rviz2</depend>
+  <depend>slam_toolbox</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
