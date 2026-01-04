@@ -29,7 +29,12 @@ def generate_launch_description():
         package='slam_toolbox',
         executable='async_slam_toolbox_node',
         name='slam_toolbox',
-        output='screen')
+        output='screen',
+        remappings=[
+            ('/scan', '/base_scan'),  # Mapira stage scan na expected topic
+            ('tf', 'tf'),
+            ('tf_static', 'tf_static'),
+        ])
 
     ld = LaunchDescription()
 
