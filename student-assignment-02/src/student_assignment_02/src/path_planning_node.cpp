@@ -11,7 +11,7 @@
 
 using std::placeholders::_1;
 
-// Struktura za čvor A* algoritma (preimenovano iz Node u PathNode)
+// Struktura za čvor A* algoritma
 struct PathNode {
     int x, y;
     float g_cost;  // Cijena od početka
@@ -30,8 +30,14 @@ struct PathNode {
 class PathPlanningNode : public rclcpp::Node {
 public:
     PathPlanningNode() : rclcpp::Node("path_planning_node") {
-        // Parametri
-        this->declare_parameter("use_sim_time", true);
+        // NE deklariramo use_sim_time jer je već deklariran od strane launch fajla
+        // Samo čitamo vrijednost ako postoji
+        try {
+            auto use_sim_time = this->get_parameter_or<bool>("use_sim_time", false);
+            RCLCPP_INFO(this->get_logger(), "use_sim_time: %s", use_sim_time ? "true" : "false");
+        } catch (...) {
+            RCLCPP_WARN(this->get_logger(), "Could not read use_sim_time parameter");
+        }
 
         // Subscriber na mapu
         map_subscription_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
