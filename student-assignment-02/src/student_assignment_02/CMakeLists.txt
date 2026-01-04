@@ -23,6 +23,9 @@ find_package(stage REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(robot_state_publisher REQUIRED)
+
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -31,6 +34,21 @@ if(NOT WIN32)
   ament_environment_hooks(
     "${ament_cmake_package_templates_ENVIRONMENT_HOOK_LIBRARY_PATH}")
 endif()
+
+# Path planning node
+add_executable(path_planning_node src/path_planning_node.cpp)
+ament_target_dependencies(path_planning_node
+  rclcpp
+  sensor_msgs
+  nav_msgs
+  geometry_msgs
+  visualization_msgs
+)
+
+install(TARGETS
+  path_planning_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(
   DIRECTORY launch
