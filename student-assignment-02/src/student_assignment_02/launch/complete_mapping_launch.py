@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Complete SLAM mapping launch file
-Pokreće sve komponente: Stage simulator, SLAM toolbox, RViz
+Pokreće sve komponente: Stage simulator, SLAM toolbox, RViz, Path Planning
 """
 
 import os
@@ -55,23 +55,9 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------
-    # RViz configuration loader
+    # Path planning node za A* vizualizaciju
     # ------------------------------------------------------------------
-    rviz_config = os.path.join(student_config_dir, 'rviz_config.rviz')
-
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', rviz_config],
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
-
-    # ------------------------------------------------------------------
-    # Marker publisher za visualizaciju A* pretrage
-    # ------------------------------------------------------------------
-    marker_node = Node(
+    path_planning_node = Node(
         package='student_assignment_02',
         executable='path_planning_node',
         name='path_planning',
@@ -83,8 +69,7 @@ def generate_launch_description():
         declare_use_sim_time,
         stage_launch,
         slam_launch,
-        rviz_node,
-        # marker_node,  # Uncomment kada kreirate path planning čvor
+        path_planning_node,
     ])
 
     return ld
