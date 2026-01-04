@@ -11,25 +11,25 @@
 
 using std::placeholders::_1;
 
-// Struktura za čvor A* algoritma
-struct Node {
+// Struktura za čvor A* algoritma (preimenovano iz Node u PathNode)
+struct PathNode {
     int x, y;
     float g_cost;  // Cijena od početka
     float h_cost;  // Heuristička procjena do cilja
     float f_cost;  // g_cost + h_cost
-    std::shared_ptr<Node> parent;
+    std::shared_ptr<PathNode> parent;
 
-    Node(int x, int y, float g, float h, std::shared_ptr<Node> p = nullptr)
+    PathNode(int x, int y, float g, float h, std::shared_ptr<PathNode> p = nullptr)
         : x(x), y(y), g_cost(g), h_cost(h), f_cost(g + h), parent(p) {}
 
-    bool operator>(const Node& other) const {
+    bool operator>(const PathNode& other) const {
         return f_cost > other.f_cost;
     }
 };
 
 class PathPlanningNode : public rclcpp::Node {
 public:
-    PathPlanningNode() : Node("path_planning_node") {
+    PathPlanningNode() : rclcpp::Node("path_planning_node") {
         // Parametri
         this->declare_parameter("use_sim_time", true);
 
@@ -43,7 +43,7 @@ public:
         marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
             "/visualization_marker_array", 10);
 
-        RCLCPP_INFO(this->get_logger(), "Path Planning Node inicijalibiran");
+        RCLCPP_INFO(this->get_logger(), "Path Planning Node inicijaliziran");
     }
 
 private:
@@ -85,13 +85,13 @@ private:
     }
 
     // Provjera je li čvor već bio otvoren
-    bool node_in_list(const std::vector<std::shared_ptr<Node>>& list, int x, int y) const {
+    bool node_in_list(const std::vector<std::shared_ptr<PathNode>>& list, int x, int y) const {
         return std::any_of(list.begin(), list.end(),
-            [x, y](const std::shared_ptr<Node>& n) { return n->x == x && n->y == y; });
+            [x, y](const std::shared_ptr<PathNode>& n) { return n->x == x && n->y == y; });
     }
 
     // Pronalaženje čvora u listi
-    std::shared_ptr<Node> find_node(std::vector<std::shared_ptr<Node>>& list, int x, int y) const {
+    std::shared_ptr<PathNode> find_node(std::vector<std::shared_ptr<PathNode>>& list, int x, int y) const {
         for (auto& n : list) {
             if (n->x == x && n->y == y) return n;
         }
@@ -101,11 +101,11 @@ private:
     // A* algoritam
     std::vector<std::pair<int, int>> a_star(int start_x, int start_y, int goal_x, int goal_y) {
         std::vector<std::pair<int, int>> path;
-        std::vector<std::shared_ptr<Node>> open_list;
-        std::vector<std::shared_ptr<Node>> closed_list;
+        std::vector<std::shared_ptr<PathNode>> open_list;
+        std::vector<std::shared_ptr<PathNode>> closed_list;
 
         // Inicijalizacija
-        auto start = std::make_shared<Node>(start_x, start_y, 0, 
+        auto start = std::make_shared<PathNode>(start_x, start_y, 0, 
                                             heuristic(start_x, start_y, goal_x, goal_y));
         open_list.push_back(start);
 
@@ -131,7 +131,7 @@ private:
                 // Rekonstruira putanju
                 auto node = current;
                 while (node != nullptr) {
-                    path.insert(path.begin(), {node->x, node->y});
+                    path.insert(path.begin(), std::make_pair(node->x, node->y));
                     node = node->parent;
                 }
                 return path;
@@ -151,7 +151,7 @@ private:
                 auto existing = find_node(open_list, new_x, new_y);
                 if (existing && new_g >= existing->g_cost) continue;
 
-                auto new_node = std::make_shared<Node>(new_x, new_y, new_g, new_h, current);
+                auto new_node = std::make_shared<PathNode>(new_x, new_y, new_g, new_h, current);
                 if (!existing) {
                     open_list.push_back(new_node);
                 } else {
@@ -229,7 +229,7 @@ private:
 
         markers.markers.push_back(start_marker);
 
-        // Vizualizacija cilične točke
+        // Vizualizacija ciljne točke
         visualization_msgs::msg::Marker goal_marker;
         goal_marker.header = path_marker.header;
         goal_marker.ns = "goal";
