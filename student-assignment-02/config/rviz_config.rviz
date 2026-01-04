@@ -1,0 +1,216 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /TF1
+        - /TF1/Frames1
+        - /LaserScan1
+        - /Map1
+      Splitter Ratio: 0.5
+    Tree Height: 455
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Expanded:
+      - /2D Goal Pose1
+      - /Publish Point1
+    Name: Tool Properties
+    Splitter Ratio: 0.588679
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        base_link:
+          Value: true
+        base_scan:
+          Value: true
+        map:
+          Value: true
+        odom:
+          Value: true
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree Height: 0
+      Update Interval: 0
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/LaserScan
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: LaserScan
+      Position Tolerance: 0.1
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.05
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /base_scan
+      Transformation: data
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.7
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map
+      Transparency: NaN
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /map_updates
+      Use Timestamp: false
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Marker Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /visualization_marker_array
+      Name: Markers (A* Search)
+      Namespaces:
+        "": true
+      Queue Size: 100
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_common/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_common/MoveCamera
+    - Class: rviz_common/Select
+    - Class: rviz_common/FocusCamera
+    - Class: rviz_common/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Theta std deviation: 0.26179938779
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /initialpose
+      X std deviation: 0.5
+      Y std deviation: 0.5
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /goal_pose
+  Transformation:
+    Current:
+      Class: rviz_common/TfFrameTransformer
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.785398
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+      Yaw: 0.785398
+    Saved: []
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 1025
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd00000004000000000000016a000003c3fc0200000008fc0000001e0000007d0000010efc020000000bfb000000100054006f006f006c00500072006f0070006500720074006900650073AwAAAAD9////000000730fb00000040000000afb0000001200440069007300700006c00610079007300000000f9000000a10000010f00fffffffc000000440000020a00000234fc0200000001fb0000000a0046006f0063007500730000000000000003000000010000010000000358000003c300000001000000020000000100fffffffffc00000000000003c300000000fc0200000001fb0000001a0044006900730070006c006100790073003f00460006f0063007500730000000000000003000000000000000000000546000003c30000000100000002000000010000000afc0000000000fffffffc000000000000000b0000000000fffffffa000000000200000002fb0000000e0054006900 6d00650050006f00 6e0065006c0100000000ffffffff0000000000000000fb0000001200530065006c0065006300740069006f006e0100000000ffffffff000000000000000000000003c300000000000000040000000400000004fc0000000100000002000000020fb0000000e0043006100 6d006500720061007300000000320000011d000000000000000200fb0000000c0047006f0061006c0050006f00730065000000014f0000000000000000fb00000008005200 6100640061007200000000000000000000000000000000000000013c000003c30000000100000002000000010000000afc0000000000fffffffc000000000000000a0000000000fffffffa000000000200000002fb0000001200530074004100720049006e00690070006100 6e0065006c0100000000ffffffff0000000000000000fb0000000800460065006600000000000000000000000000ffffffff0000000000000000000005b4000003c300000001000000020000000100000008fc00000000000003c30000000000fffffffa000000010400000004fb0000000c00410074007400720069006200 7500740065007300000000000000000000000000000000fb0000000a00500072006f00700065007200740069006500 7300000002290000000000000000fb00000012005300650061007200630068005200650073007500 6c00740073ffffffff0000000000000000fb0000001200 500075006200 6c006900730068005000 6f0069006e00740000000257000000000000000000000003c300000000000000040000000400000004fc0000000100000002000000020000000afc0000000000ffffff fc000000000000000a0000000000fffffffa000000000200000002fb0000000e0054006900 6d00650050006f00 6e0065006c0100000000ffffffff0000000000000000fb0000001200 530065006c0065006300740069006f006e0100000000ffffffff000000000000000000000003c300000000000000040000000400000004fc0000000100000002000000020fb0000000e0043006100 6d006500720061007300000000320000011d000000000000000200fb0000000c0047006f0061006c0050006f00730065000000014f0000000000000000fb00000008005200 6100640061007200000000000000000000000000000000000000013c000003c300000001000000020000000100000008fc00000000000003c300000000000000000000013 a000003c3000000000000000
+  Selection:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: true
+  Width: 1920
+  X: 0
+  Y: 0
