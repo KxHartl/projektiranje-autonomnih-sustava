@@ -25,6 +25,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(robot_state_publisher REQUIRED)
+find_package(tf2 REQUIRED)
 
 # uncomment the following section in order to fill in
 # further dependencies manually.
@@ -35,7 +36,7 @@ if(NOT WIN32)
     "${ament_cmake_package_templates_ENVIRONMENT_HOOK_LIBRARY_PATH}")
 endif()
 
-# Path planning node
+# Path planning node (A* algoritam)
 add_executable(path_planning_node src/path_planning_node.cpp)
 ament_target_dependencies(path_planning_node
   rclcpp
@@ -45,8 +46,19 @@ ament_target_dependencies(path_planning_node
   visualization_msgs
 )
 
+# Goal navigation node (Gibanje robota)
+add_executable(goal_navigation_node src/goal_navigation_node.cpp)
+ament_target_dependencies(goal_navigation_node
+  rclcpp
+  nav_msgs
+  geometry_msgs
+  tf2
+  tf2_geometry_msgs
+)
+
 install(TARGETS
   path_planning_node
+  goal_navigation_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
