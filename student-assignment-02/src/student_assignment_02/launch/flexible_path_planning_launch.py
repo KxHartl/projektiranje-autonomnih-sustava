@@ -1,12 +1,12 @@
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    # Package direktorio
+    # Package direktorij
     package_dir = get_package_share_directory('student_assignment_02')
     
     # Deklaracija argumenata
@@ -29,17 +29,22 @@ def generate_launch_description():
         'stage.world'
     )
 
-    # Izgradi putanju do mape na osnovu map_name parametra
-    # data/maps/{map_name}/map.yaml
-    map_yaml = os.path.join(
+    # Izgradi putanju do mape: data/maps/{map_name}/map.yaml
+    # Trebam iskoristiti os.path.join s fiksnim dijelovima i substitution za map_name
+    data_dir = os.path.join(
         package_dir,
         '..',  # izlazi iz src/student_assignment_02
         '..',  # izlazi iz src
         'data',
-        'maps',
+        'maps'
+    )
+    
+    # Koristi PathJoinSubstitution za dinamičku putanju
+    map_yaml = PathJoinSubstitution([
+        data_dir,
         LaunchConfiguration('map_name'),
         'map.yaml'
-    )
+    ])
 
     return LaunchDescription([
         map_name_arg,
