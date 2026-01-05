@@ -51,11 +51,11 @@ def generate_launch_description():
         use_sim_time_arg,
 
         # ========== SIMULATOR ==========
-        # Stage simulator
+        # Stage simulator (koristi stage_ros2)
         Node(
-            package='stage_ros',
-            executable='stageros',
-            name='stageros',
+            package='stage_ros2',
+            executable='stage_ros2',
+            name='stage_ros2',
             arguments=[stage_world],
             output='screen',
             parameters=[{
