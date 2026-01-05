@@ -22,10 +22,10 @@ find_package(std_msgs REQUIRED)
 find_package(stage REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(robot_state_publisher REQUIRED)
-find_package(tf2 REQUIRED)
 
 # uncomment the following section in order to fill in
 # further dependencies manually.
@@ -44,6 +44,9 @@ ament_target_dependencies(path_planning_node
   nav_msgs
   geometry_msgs
   visualization_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 # Goal navigation node (Gibanje robota)
