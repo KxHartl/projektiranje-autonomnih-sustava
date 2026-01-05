@@ -1,11 +1,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
-#include <nav_msgs/msg/path.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <geometry_msgs/msg/point.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <queue>
 #include <vector>
 #include <cmath>
@@ -52,10 +49,6 @@ public:
             rclcpp::SensorDataQoS(),
             std::bind(&PathPlanningNode::map_callback, this, _1));
 
-        // Publisher za putanju
-        path_publisher_ = this->create_publisher<nav_msgs::msg::Path>(
-            "/planned_path", 10);
-
         // Publisher za vizualizaciju A* pretrage
         marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
             "/visualization_marker_array", 10);
@@ -70,7 +63,6 @@ public:
 
 private:
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_subscription_;
-    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
     rclcpp::TimerBase::SharedPtr plan_timer_;
     
@@ -109,9 +101,6 @@ private:
 
         if (!path.empty()) {
             RCLCPP_INFO(this->get_logger(), "Putanja pronađena! Duljina: %zu čvorova", path.size());
-            
-            // Objavi putanju
-            publish_path(path);
             
             // Vizualizacija
             visualize_path(path, start_x, start_y, goal_x, goal_y);
@@ -186,7 +175,7 @@ private:
         while (!open_list.empty() && iterations < MAX_ITERATIONS) {
             iterations++;
 
-            // Pronalazi čvor sa najmanjom f cost
+            // Pronalazi čvor sa najmanjom f_cost
             int current_idx = 0;
             for (int i = 1; i < (int)open_list.size(); i++) {
                 if (open_list[i]->f_cost < open_list[current_idx]->f_cost) {
@@ -250,28 +239,6 @@ private:
             RCLCPP_WARN(this->get_logger(), "Putanja nije pronađena nakon %d iteracija", iterations);
         }
         return path;
-    }
-
-    void publish_path(const std::vector<std::pair<int, int>>& path) {
-        nav_msgs::msg::Path path_msg;
-        path_msg.header.frame_id = current_map_.header.frame_id;
-        path_msg.header.stamp = this->now();
-
-        for (const auto& p : path) {
-            geometry_msgs::msg::PoseStamped pose;
-            pose.header.frame_id = current_map_.header.frame_id;
-            pose.header.stamp = this->now();
-            
-            // Konvertuj gridove u metriku
-            pose.pose.position.x = (p.first + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.x;
-            pose.pose.position.y = (p.second + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.y;
-            pose.pose.position.z = 0.0;
-            pose.pose.orientation.w = 1.0;
-
-            path_msg.poses.push_back(pose);
-        }
-
-        path_publisher_->publish(path_msg);
     }
 
     void visualize_path(const std::vector<std::pair<int, int>>& path,
