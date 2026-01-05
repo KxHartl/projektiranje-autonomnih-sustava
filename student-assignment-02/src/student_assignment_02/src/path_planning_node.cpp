@@ -1,13 +1,17 @@
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include <nav_msgs/msg/path.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <queue>
 #include <vector>
 #include <cmath>
 #include <memory>
 #include <algorithm>
+#include <set>
 
 using std::placeholders::_1;
 
@@ -25,13 +29,16 @@ struct PathNode {
     bool operator>(const PathNode& other) const {
         return f_cost > other.f_cost;
     }
+
+    bool operator==(const PathNode& other) const {
+        return x == other.x && y == other.y;
+    }
 };
 
 class PathPlanningNode : public rclcpp::Node {
 public:
     PathPlanningNode() : rclcpp::Node("path_planning_node") {
         // NE deklariramo use_sim_time jer je već deklariran od strane launch fajla
-        // Samo čitamo vrijednost ako postoji
         try {
             auto use_sim_time = this->get_parameter_or<bool>("use_sim_time", false);
             RCLCPP_INFO(this->get_logger(), "use_sim_time: %s", use_sim_time ? "true" : "false");
@@ -45,34 +52,84 @@ public:
             rclcpp::SensorDataQoS(),
             std::bind(&PathPlanningNode::map_callback, this, _1));
 
-        // Publisher za vizualizaciju pretrage
+        // Publisher za putanju
+        path_publisher_ = this->create_publisher<nav_msgs::msg::Path>(
+            "/planned_path", 10);
+
+        // Publisher za vizualizaciju A* pretrage
         marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
             "/visualization_marker_array", 10);
+
+        // Timer za planiranje
+        plan_timer_ = this->create_wall_timer(
+            std::chrono::seconds(5),
+            std::bind(&PathPlanningNode::plan_path_callback, this));
 
         RCLCPP_INFO(this->get_logger(), "Path Planning Node inicijaliziran");
     }
 
 private:
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_subscription_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_publisher_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
+    rclcpp::TimerBase::SharedPtr plan_timer_;
+    
     nav_msgs::msg::OccupancyGrid current_map_;
     bool map_received_ = false;
+    int plan_count_ = 0;
 
     void map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg) {
         current_map_ = *msg;
         map_received_ = true;
-        RCLCPP_INFO(this->get_logger(), "Mapa primljena: %d x %d", 
-                    current_map_.info.width, current_map_.info.height);
+        
+        if (plan_count_ == 0) {
+            RCLCPP_INFO(this->get_logger(), "Mapa primljena: %d x %d, rezolucija: %.2f m/cell",
+                        current_map_.info.width, current_map_.info.height,
+                        current_map_.info.resolution);
+        }
+    }
 
-        // Primjer: Planiranje putanje od (1, 1) do (10, 10)
-        if (map_received_) {
-            plan_path(1, 1, 10, 10);
+    void plan_path_callback() {
+        if (!map_received_) return;
+
+        plan_count_++;
+        
+        // Početna pozicija (lijeva strana)
+        int start_x = 5;
+        int start_y = current_map_.info.height / 2;
+        
+        // Ciljna pozicija (desna strana)
+        int goal_x = current_map_.info.width - 5;
+        int goal_y = current_map_.info.height / 2;
+
+        RCLCPP_INFO(this->get_logger(), "[Plan %d] Planiranje putanje od (%d, %d) do (%d, %d)",
+                    plan_count_, start_x, start_y, goal_x, goal_y);
+
+        auto path = a_star(start_x, start_y, goal_x, goal_y);
+
+        if (!path.empty()) {
+            RCLCPP_INFO(this->get_logger(), "Putanja pronađena! Duljina: %zu čvorova", path.size());
+            
+            // Objavi putanju
+            publish_path(path);
+            
+            // Vizualizacija
+            visualize_path(path, start_x, start_y, goal_x, goal_y);
+        } else {
+            RCLCPP_WARN(this->get_logger(), "Nije moguće planirati putanju");
         }
     }
 
     // Manhattan distanca kao heuristika
     float heuristic(int x1, int y1, int x2, int y2) const {
         return std::abs(x1 - x2) + std::abs(y1 - y2);
+    }
+
+    // Euklidska distanca (alternativa)
+    float heuristic_euclidean(int x1, int y1, int x2, int y2) const {
+        float dx = x1 - x2;
+        float dy = y1 - y2;
+        return std::sqrt(dx * dx + dy * dy);
     }
 
     // Provjera je li čvor dostupan (nije zauzet)
@@ -87,13 +144,8 @@ private:
             return false;
         }
         
-        return current_map_.data[index] < 50;  // <50 = slobodno
-    }
-
-    // Provjera je li čvor već bio otvoren
-    bool node_in_list(const std::vector<std::shared_ptr<PathNode>>& list, int x, int y) const {
-        return std::any_of(list.begin(), list.end(),
-            [x, y](const std::shared_ptr<PathNode>& n) { return n->x == x && n->y == y; });
+        // < 50 = slobodno, >= 50 = zauzeto
+        return current_map_.data[index] < 50;
     }
 
     // Pronalaženje čvora u listi
@@ -104,22 +156,36 @@ private:
         return nullptr;
     }
 
-    // A* algoritam
+    // A* algoritam sa poboljšanjima
     std::vector<std::pair<int, int>> a_star(int start_x, int start_y, int goal_x, int goal_y) {
         std::vector<std::pair<int, int>> path;
+        
+        // Ako je cilj nedostižan odmah, vrati praznu putanju
+        if (!is_valid(goal_x, goal_y)) {
+            RCLCPP_WARN(this->get_logger(), "Ciljna pozicija nije dostupna");
+            return path;
+        }
+
         std::vector<std::shared_ptr<PathNode>> open_list;
         std::vector<std::shared_ptr<PathNode>> closed_list;
+        std::set<std::pair<int, int>> closed_set;  // Za brže pretraživanje
 
-        // Inicijalizacija
-        auto start = std::make_shared<PathNode>(start_x, start_y, 0, 
-                                            heuristic(start_x, start_y, goal_x, goal_y));
+        // Inicijalizacija početnog čvora
+        auto start = std::make_shared<PathNode>(start_x, start_y, 0.0f,
+                                                heuristic(start_x, start_y, goal_x, goal_y));
         open_list.push_back(start);
 
-        // Smjerovi kretanja (8 smjerova)
-        int dx[] = {-1, -1, -1, 0, 0, 1, 1, 1};
-        int dy[] = {-1, 0, 1, -1, 1, -1, 0, 1};
+        // 8-smjerna kretanja (N, NE, E, SE, S, SW, W, NW)
+        int dx[] = {0, 1, 1, 1, 0, -1, -1, -1};
+        int dy[] = {-1, -1, 0, 1, 1, 1, 0, -1};
+        float cost[] = {1.0f, 1.414f, 1.0f, 1.414f, 1.0f, 1.414f, 1.0f, 1.414f};  // Dijagonalne su skuplje
 
-        while (!open_list.empty()) {
+        int iterations = 0;
+        const int MAX_ITERATIONS = 100000;
+
+        while (!open_list.empty() && iterations < MAX_ITERATIONS) {
+            iterations++;
+
             // Pronalazi čvor sa najmanjom f cost
             int current_idx = 0;
             for (int i = 1; i < (int)open_list.size(); i++) {
@@ -131,9 +197,12 @@ private:
             auto current = open_list[current_idx];
             open_list.erase(open_list.begin() + current_idx);
             closed_list.push_back(current);
+            closed_set.insert({current->x, current->y});
 
             // Provjerava je li cilj dostignut
             if (current->x == goal_x && current->y == goal_y) {
+                RCLCPP_INFO(this->get_logger(), "A* završen u %d iteracija", iterations);
+                
                 // Rekonstruira putanju
                 auto node = current;
                 while (node != nullptr) {
@@ -143,55 +212,73 @@ private:
                 return path;
             }
 
-            // Provjeri sve susjede
+            // Provjeri sve susjede (8 smjerova)
             for (int i = 0; i < 8; i++) {
                 int new_x = current->x + dx[i];
                 int new_y = current->y + dy[i];
 
+                // Provjeri je li dostupan
                 if (!is_valid(new_x, new_y)) continue;
-                if (node_in_list(closed_list, new_x, new_y)) continue;
+                
+                // Ako je već u closed listi, preskoči
+                if (closed_set.count({new_x, new_y})) continue;
 
-                float new_g = current->g_cost + std::sqrt(dx[i] * dx[i] + dy[i] * dy[i]);
+                float new_g = current->g_cost + cost[i];
                 float new_h = heuristic(new_x, new_y, goal_x, goal_y);
 
+                // Provjeri je li čvor već u open listi
                 auto existing = find_node(open_list, new_x, new_y);
-                if (existing && new_g >= existing->g_cost) continue;
-
-                auto new_node = std::make_shared<PathNode>(new_x, new_y, new_g, new_h, current);
-                if (!existing) {
-                    open_list.push_back(new_node);
+                
+                if (existing) {
+                    // Ako je novi put jeftiniji, ažuriraj
+                    if (new_g < existing->g_cost) {
+                        existing->g_cost = new_g;
+                        existing->f_cost = new_g + existing->h_cost;
+                        existing->parent = current;
+                    }
                 } else {
-                    existing->g_cost = new_g;
-                    existing->f_cost = new_g + existing->h_cost;
-                    existing->parent = current;
+                    // Dodaj novi čvor u open listu
+                    auto new_node = std::make_shared<PathNode>(new_x, new_y, new_g, new_h, current);
+                    open_list.push_back(new_node);
                 }
             }
         }
 
-        RCLCPP_WARN(this->get_logger(), "Putanja nije pronađena!");
+        if (iterations >= MAX_ITERATIONS) {
+            RCLCPP_WARN(this->get_logger(), "A* dosegao max iteracija (%d)", MAX_ITERATIONS);
+        } else {
+            RCLCPP_WARN(this->get_logger(), "Putanja nije pronađena nakon %d iteracija", iterations);
+        }
         return path;
     }
 
-    void plan_path(int start_x, int start_y, int goal_x, int goal_y) {
-        if (!map_received_) return;
+    void publish_path(const std::vector<std::pair<int, int>>& path) {
+        nav_msgs::msg::Path path_msg;
+        path_msg.header.frame_id = current_map_.header.frame_id;
+        path_msg.header.stamp = this->now();
 
-        RCLCPP_INFO(this->get_logger(), "Planiranje putanje od (%d, %d) do (%d, %d)",
-                    start_x, start_y, goal_x, goal_y);
+        for (const auto& p : path) {
+            geometry_msgs::msg::PoseStamped pose;
+            pose.header.frame_id = current_map_.header.frame_id;
+            pose.header.stamp = this->now();
+            
+            // Konvertuj gridove u metriku
+            pose.pose.position.x = (p.first + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.x;
+            pose.pose.position.y = (p.second + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.y;
+            pose.pose.position.z = 0.0;
+            pose.pose.orientation.w = 1.0;
 
-        auto path = a_star(start_x, start_y, goal_x, goal_y);
-
-        if (!path.empty()) {
-            RCLCPP_INFO(this->get_logger(), "Putanja pronađena! Duljina: %zu", path.size());
-            visualize_path(path);
-        } else {
-            RCLCPP_WARN(this->get_logger(), "Nije moguće planirati putanju");
+            path_msg.poses.push_back(pose);
         }
+
+        path_publisher_->publish(path_msg);
     }
 
-    void visualize_path(const std::vector<std::pair<int, int>>& path) {
+    void visualize_path(const std::vector<std::pair<int, int>>& path,
+                       int start_x, int start_y, int goal_x, int goal_y) {
         visualization_msgs::msg::MarkerArray markers;
 
-        // Vizualizacija putanje
+        // 1. Vizualizacija putanje (zelena linija)
         visualization_msgs::msg::Marker path_marker;
         path_marker.header.frame_id = current_map_.header.frame_id;
         path_marker.header.stamp = this->now();
@@ -199,23 +286,24 @@ private:
         path_marker.id = 0;
         path_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
         path_marker.action = visualization_msgs::msg::Marker::ADD;
-        path_marker.scale.x = 0.05;
+        path_marker.scale.x = 0.1;  // Debljina linije
         path_marker.color.r = 0.0f;
         path_marker.color.g = 1.0f;
         path_marker.color.b = 0.0f;
         path_marker.color.a = 1.0f;
+        path_marker.pose.orientation.w = 1.0;
 
         for (const auto& p : path) {
             geometry_msgs::msg::Point pt;
             pt.x = (p.first + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.x;
             pt.y = (p.second + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.y;
-            pt.z = 0.0;
+            pt.z = 0.05;  // Malo iznad mape
             path_marker.points.push_back(pt);
         }
 
         markers.markers.push_back(path_marker);
 
-        // Vizualizacija početne točke
+        // 2. Početna točka (zelena sfera)
         visualization_msgs::msg::Marker start_marker;
         start_marker.header = path_marker.header;
         start_marker.ns = "start";
@@ -229,13 +317,14 @@ private:
         start_marker.color.g = 1.0f;
         start_marker.color.b = 0.0f;
         start_marker.color.a = 1.0f;
-        start_marker.pose.position.x = (path[0].first + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.x;
-        start_marker.pose.position.y = (path[0].second + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.y;
+        start_marker.pose.position.x = (start_x + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.x;
+        start_marker.pose.position.y = (start_y + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.y;
         start_marker.pose.position.z = 0.0;
+        start_marker.pose.orientation.w = 1.0;
 
         markers.markers.push_back(start_marker);
 
-        // Vizualizacija ciljne točke
+        // 3. Ciljna točka (crvena sfera)
         visualization_msgs::msg::Marker goal_marker;
         goal_marker.header = path_marker.header;
         goal_marker.ns = "goal";
@@ -249,9 +338,10 @@ private:
         goal_marker.color.g = 0.0f;
         goal_marker.color.b = 0.0f;
         goal_marker.color.a = 1.0f;
-        goal_marker.pose.position.x = (path.back().first + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.x;
-        goal_marker.pose.position.y = (path.back().second + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.y;
+        goal_marker.pose.position.x = (goal_x + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.x;
+        goal_marker.pose.position.y = (goal_y + 0.5f) * current_map_.info.resolution + current_map_.info.origin.position.y;
         goal_marker.pose.position.z = 0.0;
+        goal_marker.pose.orientation.w = 1.0;
 
         markers.markers.push_back(goal_marker);
 
