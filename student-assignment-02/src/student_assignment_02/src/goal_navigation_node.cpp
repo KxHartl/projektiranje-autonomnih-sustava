@@ -7,6 +7,7 @@
 #include <tf2/convert.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <cmath>
+#include <algorithm>
 
 using std::placeholders::_1;
 
@@ -31,17 +32,19 @@ public:
         // Parametri
         this->declare_parameter("linear_speed", 0.2);
         this->declare_parameter("angular_speed", 0.5);
-        this->declare_parameter("goal_tolerance", 0.1);
-        this->declare_parameter("angle_tolerance", 0.1);
+        this->declare_parameter("waypoint_tolerance", 0.15);
+        this->declare_parameter("angle_tolerance", 0.2);
 
         linear_speed_ = this->get_parameter("linear_speed").as_double();
         angular_speed_ = this->get_parameter("angular_speed").as_double();
-        goal_tolerance_ = this->get_parameter("goal_tolerance").as_double();
+        waypoint_tolerance_ = this->get_parameter("waypoint_tolerance").as_double();
         angle_tolerance_ = this->get_parameter("angle_tolerance").as_double();
 
         RCLCPP_INFO(this->get_logger(), "Goal Navigation Node inicijaliziran");
         RCLCPP_INFO(this->get_logger(), "  Linear speed: %.2f m/s", linear_speed_);
         RCLCPP_INFO(this->get_logger(), "  Angular speed: %.2f rad/s", angular_speed_);
+        RCLCPP_INFO(this->get_logger(), "  Waypoint tolerance: %.2f m", waypoint_tolerance_);
+        RCLCPP_INFO(this->get_logger(), "  Angle tolerance: %.2f rad", angle_tolerance_);
     }
 
 private:
@@ -56,8 +59,13 @@ private:
 
     double linear_speed_;
     double angular_speed_;
-    double goal_tolerance_;
+    double waypoint_tolerance_;
     double angle_tolerance_;
+
+    // Simulirana robot pozicija
+    double robot_x_ = 0.0;
+    double robot_y_ = 0.0;
+    double robot_theta_ = 0.0;
 
     void path_callback(const nav_msgs::msg::Path::SharedPtr msg) {
         current_path_ = *msg;
@@ -65,20 +73,25 @@ private:
         current_waypoint_idx_ = 0;
         is_moving_ = true;
 
-        RCLCPP_INFO(this->get_logger(), "Nova putanja primljena s %zu točaka", 
+        RCLCPP_INFO(this->get_logger(), "✅ Nova putanja primljena s %zu točaka", 
                    current_path_.poses.size());
+        
+        // Inicijalizuj robot poziciju na prvi waypoint
+        if (!current_path_.poses.empty()) {
+            robot_x_ = current_path_.poses[0].pose.position.x;
+            robot_y_ = current_path_.poses[0].pose.position.y;
+        }
     }
 
     void move_callback() {
         if (!path_received_ || !is_moving_ || current_path_.poses.empty()) {
-            // Stani
             stop_robot();
             return;
         }
 
         // Ako smo dostigli zadnji waypoint
         if (current_waypoint_idx_ >= current_path_.poses.size()) {
-            RCLCPP_INFO(this->get_logger(), "Cilj dostignut! Gibanje završeno.");
+            RCLCPP_INFO(this->get_logger(), "✅ Cilj dostignut! Gibanje završeno.");
             stop_robot();
             is_moving_ = false;
             path_received_ = false;
@@ -90,71 +103,75 @@ private:
         auto target_x = target_pose.position.x;
         auto target_y = target_pose.position.y;
 
-        // Simulirana pozicija robota (u stvarnoj situaciji biće iz /tf ili /odom)
-        // Za sada pretpostavljamo da se robot giba u smjeru putanje
-        static double robot_x = 0.0, robot_y = 0.0, robot_theta = 0.0;
-        static bool first_call = true;
-
-        if (first_call) {
-            if (!current_path_.poses.empty()) {
-                robot_x = current_path_.poses[0].pose.position.x;
-                robot_y = current_path_.poses[0].pose.position.y;
-                first_call = false;
-            }
-        }
-
         // Izračun distancije do cilja
-        double dx = target_x - robot_x;
-        double dy = target_y - robot_y;
+        double dx = target_x - robot_x_;
+        double dy = target_y - robot_y_;
         double distance = std::sqrt(dx * dx + dy * dy);
 
         // Ako je distanca manja od tolerance, idi na sljedeći waypoint
-        if (distance < goal_tolerance_) {
+        if (distance < waypoint_tolerance_) {
             current_waypoint_idx_++;
-            RCLCPP_INFO(this->get_logger(), "Waypoint %zu dostignut. Ideći...",
-                       current_waypoint_idx_);
+            if (current_waypoint_idx_ % 10 == 0 || current_waypoint_idx_ == current_path_.poses.size()) {
+                RCLCPP_INFO(this->get_logger(), "✅ Waypoint %zu dostignut (%.2f m)", 
+                           current_waypoint_idx_, distance);
+            }
             return;
         }
 
         // Izračun kuta do cilja
         double target_angle = std::atan2(dy, dx);
-        double angle_diff = target_angle - robot_theta;
+        double angle_diff = target_angle - robot_theta_;
 
         // Normaliziranje kuta na [-pi, pi]
         while (angle_diff > M_PI) angle_diff -= 2 * M_PI;
         while (angle_diff < -M_PI) angle_diff += 2 * M_PI;
 
         geometry_msgs::msg::Twist cmd_vel;
+        cmd_vel.linear.z = 0.0;
+        cmd_vel.angular.x = 0.0;
+        cmd_vel.angular.y = 0.0;
 
-        // Ako trebamo rotirati
+        // Logika: 
+        // 1. Ako je ugao prevelik, samo rotiraj
+        // 2. Inače, kreni naprijed sa manjom rotacijom
+        
         if (std::abs(angle_diff) > angle_tolerance_) {
-            cmd_vel.linear.x = 0.0;
+            // Trebam se zarotirati
+            cmd_vel.linear.x = 0.0;  // Ne kreci se naprijed
             cmd_vel.angular.z = (angle_diff > 0) ? angular_speed_ : -angular_speed_;
-            
-            RCLCPP_DEBUG(this->get_logger(), "Rotacija: angle_diff=%.2f rad", angle_diff);
         } else {
-            // Kreni prema cilju
+            // Kreni prema cilju s blagom rotacijom
             cmd_vel.linear.x = linear_speed_;
-            cmd_vel.angular.z = angular_speed_ * (angle_diff / 0.1);  // PD kontrola
-
-            // Simulacija gibanja robota
-            robot_x += linear_speed_ * std::cos(robot_theta) * 0.1;
-            robot_y += linear_speed_ * std::sin(robot_theta) * 0.1;
-            robot_theta += cmd_vel.angular.z * 0.1;
-
-            if (current_waypoint_idx_ % 5 == 0) {
-                RCLCPP_DEBUG(this->get_logger(), 
-                           "Gibanje: robot(%.2f, %.2f) -> target(%.2f, %.2f), d=%.2f",
-                           robot_x, robot_y, target_x, target_y, distance);
-            }
+            // PD kontrola za mali kotni korekcija
+            cmd_vel.angular.z = std::max(-angular_speed_, std::min(angular_speed_, angle_diff * 0.5));
         }
 
         cmd_vel_publisher_->publish(cmd_vel);
+
+        // Simulacija gibanja robota
+        robot_x_ += cmd_vel.linear.x * std::cos(robot_theta_) * 0.1;
+        robot_y_ += cmd_vel.linear.x * std::sin(robot_theta_) * 0.1;
+        robot_theta_ += cmd_vel.angular.z * 0.1;
+
+        // Normaliziranje theta
+        while (robot_theta_ > M_PI) robot_theta_ -= 2 * M_PI;
+        while (robot_theta_ < -M_PI) robot_theta_ += 2 * M_PI;
+
+        if (current_waypoint_idx_ % 20 == 0) {
+            RCLCPP_DEBUG(this->get_logger(), 
+                       "[WP %zu] Robot: (%.2f, %.2f, %.2f rad) | Target: (%.2f, %.2f) | Dist: %.2f m | Angle diff: %.2f rad",
+                       current_waypoint_idx_, robot_x_, robot_y_, robot_theta_,
+                       target_x, target_y, distance, angle_diff);
+        }
     }
 
     void stop_robot() {
         geometry_msgs::msg::Twist cmd_vel;
         cmd_vel.linear.x = 0.0;
+        cmd_vel.linear.y = 0.0;
+        cmd_vel.linear.z = 0.0;
+        cmd_vel.angular.x = 0.0;
+        cmd_vel.angular.y = 0.0;
         cmd_vel.angular.z = 0.0;
         cmd_vel_publisher_->publish(cmd_vel);
     }
