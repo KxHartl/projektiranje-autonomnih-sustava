@@ -1,19 +1,15 @@
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    # Package direktorij
-    package_dir = get_package_share_directory('student_assignment_02')
-    
     # Deklaracija argumenata
-    map_name_arg = DeclareLaunchArgument(
-        'map_name',
-        default_value='my_map',
-        description='Name of the map in data/maps/ (e.g., "my_map", "office", "lab")'
+    map_path_arg = DeclareLaunchArgument(
+        'map_path',
+        default_value=os.path.expanduser('~/my_map'),
+        description='Path to the pre-mapped map directory (map.yaml)'
     )
     
     use_sim_time_arg = DeclareLaunchArgument(
@@ -24,32 +20,17 @@ def generate_launch_description():
 
     # Putanja do Stage world fajla
     stage_world = os.path.join(
-        package_dir,
+        get_package_share_directory('student_assignment_02'),
         'world',
         'stage.world'
     )
-    
-    # Pronađi projekt root - ide "gore" iz package_dir
-    # package_dir = .../install/student_assignment_02/share/student_assignment_02
-    # Trebam doci do .../student-assignment-02/
-    project_root = os.path.abspath(os.path.join(package_dir, '../../..'))
-    
-    # Putanja do mape - biti će formirana s map_name parametrom
-    # Trebam default putanju jer se map_name ne može koristiti direktno u os.path.join
-    map_yaml = os.path.join(
-        project_root,
-        'data',
-        'maps',
-        'my_map',  # Default
-        'map.yaml'
-    )
 
     return LaunchDescription([
-        map_name_arg,
+        map_path_arg,
         use_sim_time_arg,
 
         # ========== SIMULATOR ==========
-        # Stage simulator (koristi stage_ros2)
+        # Stage simulator
         Node(
             package='stage_ros2',
             executable='stage_ros2',
@@ -73,14 +54,14 @@ def generate_launch_description():
         ),
 
         # ========== MAP MANAGEMENT ==========
-        # Map Server - učitava odabranu mapu iz data/maps/
+        # Map Server - učitava unaprijed mapiranu mapu
         Node(
             package='nav2_map_server',
             executable='map_server',
             name='map_server',
             output='screen',
             parameters=[{
-                'yaml_filename': map_yaml,
+                'yaml_filename': os.path.expanduser('~/my_map/map.yaml'),
                 'use_sim_time': True,
             }],
         ),
