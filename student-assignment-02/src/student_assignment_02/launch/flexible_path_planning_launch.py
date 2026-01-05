@@ -4,36 +4,10 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
-import subprocess
-
-def get_project_root():
-    """Pronađi korijen projekta"""
-    try:
-        # Pokušaj pronađi GIT korijen
-        result = subprocess.run(
-            ['git', 'rev-parse', '--show-toplevel'],
-            cwd=os.path.dirname(__file__),
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except:
-        pass
-    
-    # Fallback: pronađi data/maps direktorij od package_share_directory
-    package_dir = get_package_share_directory('student_assignment_02')
-    # student_assignment_02/install/student_assignment_02/share/student_assignment_02
-    # Trebam doći do student_assignment_02/ (glavna direktiva)
-    # ../../../ = ide iz share/student_assignment_02 u student_assignment_02
-    return os.path.abspath(os.path.join(package_dir, '../../..'))
 
 def generate_launch_description():
     # Package direktorij
     package_dir = get_package_share_directory('student_assignment_02')
-    
-    # Pronađi korijen projekta
-    project_root = get_project_root()
     
     # Deklaracija argumenata
     map_name_arg = DeclareLaunchArgument(
@@ -55,33 +29,13 @@ def generate_launch_description():
         'stage.world'
     )
     
-    # Putanja do mape koristi projekt root
-    # Dinamička interpolacija za map_name
-    map_dir = os.path.join(project_root, 'data', 'maps')
+    # Pronađi projekt root - ide "gore" iz package_dir
+    # package_dir = .../install/student_assignment_02/share/student_assignment_02
+    # Trebam doci do .../student-assignment-02/
+    project_root = os.path.abspath(os.path.join(package_dir, '../../..'))
     
-    # Kreiraj mapu po map_name
-    def get_map_yaml():
-        map_name = LaunchConfiguration('map_name').perform(None)
-        return os.path.join(map_dir, map_name, 'map.yaml')
-    
-    # Koristi direktan path
-    map_yaml_path = os.path.join(
-        project_root,
-        'data',
-        'maps',
-        '${map_name}',  # Bit će substituiran pri izvršavanju
-        'map.yaml'
-    ).replace('${map_name}', LaunchConfiguration('map_name').perform(None) or 'my_map')
-    
-    # Jednostavnije: koristi evaluator
-    class MapYamlEvaluator:
-        def __init__(self, root):
-            self.root = root
-        
-        def __str__(self):
-            return str(self.root)
-    
-    # Build putanja na osnovu map_name
+    # Putanja do mape - biti će formirana s map_name parametrom
+    # Trebam default putanju jer se map_name ne može koristiti direktno u os.path.join
     map_yaml = os.path.join(
         project_root,
         'data',
@@ -101,6 +55,17 @@ def generate_launch_description():
             executable='stage_ros2',
             name='stage_ros2',
             arguments=[stage_world],
+            output='screen',
+            parameters=[{
+                'use_sim_time': True,
+            }],
+        ),
+
+        # Robot State Publisher
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
             output='screen',
             parameters=[{
                 'use_sim_time': True,
