@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Map View Launch File - V4 (CRITICAL FIX)
+Map View Launch File - V5 (FINAL FIX)
 Prikazi Stage simulator s mapom iz mapped_maps/ direktorija
 
-FIX: Koristi ROS_WORKSPACE ili eksplicitnu putanju, ne install/
+FINAL FIX: mapped_maps je u student-assignment-02/, ne u parent
+Putanja: student-assignment-02/mapped_maps/map_01/map_01.yaml
 
 Usage:
     ros2 launch student_assignment_02 map_view_launch.py
 """
 
 import os
-import subprocess
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -20,38 +20,18 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def get_workspace_root():
-    """
-    Pronađi root direktorij workspace-a (student-assignment-02)
-    Koristi: git rev-parse --show-toplevel ILI environment varijabla
-    """
-    try:
-        # Pokušaj s git-om
-        result = subprocess.run(
-            ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True,
-            text=True,
-            cwd=os.path.expanduser('~/FSB/projektiranje-autonomnih-sustava/student-assignment-02')
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except Exception as e:
-        print(f"Debug: git command failed: {e}")
-    
-    # Fallback: Koristi home + poznatih putanja
-    return os.path.expanduser('~/FSB/projektiranje-autonomnih-sustava/student-assignment-02')
-
-
 def generate_launch_description():
     # Dobij direktorij naseg paketa (iz install/)
     student_share = get_package_share_directory('student_assignment_02')
     student_config_dir = os.path.join(student_share, 'config')
     student_world_dir = os.path.join(student_share, 'world')
     
-    # CRITICAL FIX: Pronađi pravi root direktorij (student-assignment-02/)
-    # NE install/student_assignment_02/, već student-assignment-02/
-    workspace_root = get_workspace_root()
-    mapped_maps_dir = os.path.join(workspace_root, 'mapped_maps')
+    # FINAL FIX: mapped_maps je u student-assignment-02/ direktoriju
+    # Putanja: ~/FSB/projektiranje-autonomnih-sustava/student-assignment-02/mapped_maps/
+    student_assignment_root = os.path.expanduser(
+        '~/FSB/projektiranje-autonomnih-sustava/student-assignment-02'
+    )
+    mapped_maps_dir = os.path.join(student_assignment_root, 'mapped_maps')
     map_file = os.path.join(mapped_maps_dir, 'map_01', 'map_01.yaml')
 
     # Argumenti
@@ -74,12 +54,12 @@ def generate_launch_description():
     world_file = os.path.join(student_world_dir, 'map_01.world')
 
     print(f"\n" + "="*70)
-    print(f"map_view_launch.py V4 - CRITICAL FIX")
+    print(f"map_view_launch.py V5 - FINAL FIX")
     print(f"="*70)
-    print(f"Workspace root:  {workspace_root}")
-    print(f"Mapped maps dir: {mapped_maps_dir}")
-    print(f"Map file:        {map_file}")
-    print(f"World file:      {world_file}")
+    print(f"Student assignment root: {student_assignment_root}")
+    print(f"Mapped maps dir:         {mapped_maps_dir}")
+    print(f"Map file:                {map_file}")
+    print(f"World file:              {world_file}")
     print(f"="*70)
     print()
 
@@ -87,12 +67,17 @@ def generate_launch_description():
     if not os.path.exists(map_file):
         print(f"⚠️  WARNING: Map file ne postoji!")
         print(f"   Tražim u: {map_file}")
-        print(f"   Kreiraj direktorij i spremi mapu:")
+        print()
+        print(f"   Kreiraj direktorij:")
         print(f"   mkdir -p {os.path.dirname(map_file)}")
-        print(f"   cp ~/temp_map.* {os.path.dirname(map_file)}/map_01.*")
+        print()
+        print(f"   Ako trebam mapu - spremi je:")
+        print(f"   1. ros2 launch student_assignment_02 mapping_complete_launch.py")
+        print(f"   2. ros2 run nav2_map_server map_saver_cli -f ~/temp_map")
+        print(f"   3. cp ~/temp_map.* {os.path.dirname(map_file)}/map_01.*")
         print()
     else:
-        print(f"✅ Map file pronađen!")
+        print(f"✅ Map file pronađen: {os.path.basename(map_file)}")
         print()
 
     # ====================================================================
