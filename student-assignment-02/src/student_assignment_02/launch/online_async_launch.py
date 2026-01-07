@@ -4,7 +4,8 @@
 Online Asynchronous SLAM Launch File
 Koristi slam_toolbox za mapiranje okoline u realnom vremenu
 
-FIX: Koristi student_assignment_02 paket, ne stage_ros2!
+Usage:
+    ros2 launch student_assignment_02 online_async_launch.py
 """
 
 import os
@@ -17,25 +18,21 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    # Koristi student_assignment_02 paket!
+    # Koristi student_assignment_02 paket
     student_share = get_package_share_directory('student_assignment_02')
     student_config_dir = os.path.join(student_share, 'config')
     
     use_sim_time = LaunchConfiguration('use_sim_time')
-    slam_params_file = LaunchConfiguration('slam_params_file')
 
     declare_use_sim_time_argument = DeclareLaunchArgument(
         'use_sim_time',
         default_value='true',
         description='Use simulation/Gazebo clock')
     
-    declare_slam_params_file_cmd = DeclareLaunchArgument(
-        'slam_params_file',
-        # ISPRAVKA: Koristi student_assignment_02, ne stage_ros2!
-        default_value=os.path.join(
-            student_share,
-            'config', 'mapper_params_online_async.yaml'),
-        description='Full path to the ROS2 parameters file to use for the slam_toolbox node')
+    # Direktna path do slam params - bez LaunchConfiguration
+    slam_params_file = os.path.join(
+        student_config_dir, 
+        'mapper_params_online_async.yaml')
 
     # Stage koristi 'laser' frame za /base_scan
     # Trebamo transform: laser -> base_link
@@ -68,7 +65,6 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     ld.add_action(declare_use_sim_time_argument)
-    ld.add_action(declare_slam_params_file_cmd)
     ld.add_action(laser_to_base_link_tf)
     ld.add_action(start_async_slam_toolbox_node)
 
