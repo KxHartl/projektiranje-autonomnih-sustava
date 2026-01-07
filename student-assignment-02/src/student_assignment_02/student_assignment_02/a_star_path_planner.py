@@ -99,7 +99,7 @@ class AStarPathPlanner(Node):
         self.declare_parameter('max_iterations', 50000)
         self.declare_parameter('search_radius', -1)  # -1 = bez ograničenja
         # NOVO: Inflation distance u metrima (0.2m = 20cm)
-        self.declare_parameter('inflation_distance_m', 0.2)  # 0.2m buffer od zidova
+        self.declare_parameter('inflation_distance_m', 0.5)  # 0.2m buffer od zidova
         self.declare_parameter('inflation_cost_threshold', 60)  # Threshold za inflation
         
         self.inflation_radius = self.get_parameter('inflation_radius').value
