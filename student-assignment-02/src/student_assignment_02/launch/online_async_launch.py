@@ -42,8 +42,10 @@ def generate_launch_description():
         output='screen',
         emulate_tty=True,
         remappings=[
-            # Stage koristi /base_scan za laser podatke
+            # Stage koristi /base_scan s frame_id='laser'
+            # Ali trebamo koristiti taj laser topic
             ('/scan', '/base_scan'),
+            
             # TF topics
             ('tf', 'tf'),
             ('tf_static', 'tf_static'),
