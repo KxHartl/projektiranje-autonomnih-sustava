@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Map View Launch File
-Prikazi Stage simulator s prethodno spremenljenom mapom u RViz-u
+Map View Launch File - V2
+Prikazi Stage simulator s mapom iz mapped_maps/ direktorija
 
-Napomena: Ovo se koristi NAKON sto ste vec napravili mapu s mapiranjem
-Mapa se koristi za vizualizaciju, ne za mapiranje
+Mape su organizirane kao:
+student-assignment-02/mapped_maps/map_01/map_01.yaml
+student-assignment-02/mapped_maps/map_01/map_01.pgm
 
 Usage:
     ros2 launch student_assignment_02 map_view_launch.py
-    ros2 launch student_assignment_02 map_view_launch.py map_file:=$HOME/map_01.yaml
+    ros2 launch student_assignment_02 map_view_launch.py map_number:=1
+    ros2 launch student_assignment_02 map_view_launch.py map_number:=2
 """
 
 import os
@@ -17,7 +19,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -26,6 +28,12 @@ def generate_launch_description():
     student_share = get_package_share_directory('student_assignment_02')
     student_config_dir = os.path.join(student_share, 'config')
     student_world_dir = os.path.join(student_share, 'world')
+    
+    # Direktorij za spremenljene mape
+    # student-assignment-02/mapped_maps/ (parent direktorij od src/student_assignment_02)
+    # Trebam ici gore do student-assignment-02 direktorija
+    student_root = os.path.dirname(os.path.dirname(student_share))
+    mapped_maps_dir = os.path.join(student_root, 'mapped_maps')
 
     # Argumenti
     declare_use_sim_time = DeclareLaunchArgument(
@@ -40,19 +48,23 @@ def generate_launch_description():
         description='Launch RViz'
     )
 
-    # Map file argument - Korisnik prosledjuje path do map_XX.yaml datoteke
-    declare_map_file = DeclareLaunchArgument(
-        'map_file',
-        default_value=os.path.expanduser('~/map_01.yaml'),
-        description='Full path to map yaml file (e.g., ~/map_01.yaml)'
+    # Map number argument - izbira između map_01, map_02, itd
+    declare_map_number = DeclareLaunchArgument(
+        'map_number',
+        default_value='1',
+        description='Map number (1, 2, 3, ...) - učitava iz mapped_maps/map_XX/'
     )
 
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_rviz = LaunchConfiguration('rviz')
-    map_file = LaunchConfiguration('map_file')
+    map_number = LaunchConfiguration('map_number')
 
     # Direktna path do world datoteke
     world_file = os.path.join(student_world_dir, 'map_01.world')
+    
+    # Konstruiraj path do mape s PythonExpression
+    # mapped_maps/map_01/map_01.yaml za map_number=1
+    map_file = PythonExpression([f"'{mapped_maps_dir}/map_' + str(", map_number, ") + '/map_' + str(", map_number, ") + '.yaml'"])
 
     # ====================================================================
     # 1. STAGE SIMULATOR
@@ -112,7 +124,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 4. MAP SERVER - Ucitaj spremenljenu mapu
+    # 4. MAP SERVER - Ucitaj spremenljenu mapu iz mapped_maps/map_XX/
     # ====================================================================
     map_server_node = Node(
         package='nav2_map_server',
@@ -151,7 +163,7 @@ def generate_launch_description():
     return LaunchDescription([
         declare_use_sim_time,
         declare_rviz,
-        declare_map_file,
+        declare_map_number,
         stage_node,
         laser_to_base_link_tf,
         robot_state_publisher,
