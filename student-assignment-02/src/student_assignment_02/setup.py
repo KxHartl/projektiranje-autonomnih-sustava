@@ -7,10 +7,17 @@ package_name = 'student_assignment_02'
 # Base directory of this package (this file's directory)
 package_dir = os.path.dirname(os.path.realpath(__file__))
 
-# Find all packages (trebam biti specifičan)
-packages = find_packages(where='', include=['student_assignment_02', 'student_assignment_02.*'])
+print(f"[INFO] Package directory: {package_dir}")
+print(f"[INFO] Contents: {os.listdir(package_dir)}")
+print(f"[INFO] Contents of subdir: {os.listdir(os.path.join(package_dir, package_name))}")
+
+# Find all packages - KLJUČNA ISPRAVKA!
+packages = find_packages(where='.', include=[f'{package_name}', f'{package_name}.*'])
 
 print(f"[INFO] Found packages: {packages}")
+
+if not packages:
+    raise RuntimeError(f"ERROR: No packages found! Check directory structure.")
 
 # Base data files (sources must be relative paths)
 data_files = [
@@ -63,7 +70,7 @@ if os.path.isdir(mapped_maps_root):
         dest = os.path.join('share', package_name, rel)
         data_files.append((dest, src_paths))
 
-print(f"[INFO] Data files: {data_files}")
+print(f"[INFO] Data files count: {len(data_files)}")
 
 setup(
     name=package_name,
