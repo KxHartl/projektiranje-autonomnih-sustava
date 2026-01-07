@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
 setup.py za student_assignment_02 ROS 2 Python paket
-
-Ovo je ispravljeno kako bi sigurno pronašlo student_assignment_02 direktorij
-s __init__.py datotekom.
 """
 
 from setuptools import setup, find_packages
@@ -12,42 +9,17 @@ from glob import glob
 
 package_name = 'student_assignment_02'
 
-# Pronađi sve packages u current direktoriju
-# where='.' znači počni od trenutnog direktorija
-# include=['student_assignment_02'] znači pronađi samo ovaj package
+# Prona đi sve packages u current direktoriju
 packages = find_packages(where='.', include=['student_assignment_02*'])
 
-print(f"\n=== SETUP.PY DEBUG ===")
-print(f"Current working directory: {os.getcwd()}")
-print(f"Script location: {os.path.dirname(os.path.abspath(__file__))}")
-print(f"Packages found: {packages}")
-print(f"Contents of current dir: {os.listdir('.')}")
-
-if os.path.isdir(package_name):
-    print(f"Contents of {package_name}: {os.listdir(package_name)}")
-    if '__init__.py' in os.listdir(package_name):
-        print(f"✓ {package_name}/__init__.py EXISTS")
-    else:
-        print(f"✗ {package_name}/__init__.py MISSING!")
-else:
-    print(f"✗ {package_name} direktorij ne postoji!")
-
+# Ako nema packages, error
 if not packages:
     raise RuntimeError(
-        f"\n[ERROR] find_packages() nije pronašao niti jedan package!\n"
-        f"Provjera:\n"
-        f"1. Je li {package_name}/__init__.py kreiran?\n"
-        f"2. Je li struktura ispravna?\n"
-        f"   src/student_assignment_02/\n"
-        f"   ├── student_assignment_02/ (package direktorij)\n"
-        f"   │   ├── __init__.py\n"
-        f"   │   ├── a_star_path_planner.py\n"
-        f"   │   └── ..."
+        f"ERROR: No packages found!\n"
+        f"Make sure {package_name}/__init__.py exists"
     )
 
-print(f"=== SETUP.PY DEBUG GOTOV ===\n")
-
-# Pronađi sve data files
+# Prona đi sve data files
 data_files = []
 
 # Resource file
@@ -86,8 +58,6 @@ if os.path.isdir('mapped_maps'):
             dest = os.path.join('share', package_name, rel_path)
             src_files = [os.path.join(rel_path, f) for f in files]
             data_files.append((dest, src_files))
-
-print(f"Data files: {len(data_files)} directories\n")
 
 setup(
     name=package_name,
