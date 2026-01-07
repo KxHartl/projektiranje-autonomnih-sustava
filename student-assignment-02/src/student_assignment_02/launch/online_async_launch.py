@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Online Asynchronous SLAM Launch File
+Koristi slam_toolbox za mapiranje okoline u realnom vremenu
+
+FIX: Koristi student_assignment_02 paket, ne stage_ros2!
+"""
+
 import os
 
 from launch import LaunchDescription
@@ -8,6 +17,10 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    # Koristi student_assignment_02 paket!
+    student_share = get_package_share_directory('student_assignment_02')
+    student_config_dir = os.path.join(student_share, 'config')
+    
     use_sim_time = LaunchConfiguration('use_sim_time')
     slam_params_file = LaunchConfiguration('slam_params_file')
 
@@ -15,12 +28,26 @@ def generate_launch_description():
         'use_sim_time',
         default_value='true',
         description='Use simulation/Gazebo clock')
+    
     declare_slam_params_file_cmd = DeclareLaunchArgument(
         'slam_params_file',
-        default_value=os.path.join(get_package_share_directory("stage_ros2"),
-                                   'config', 'mapper_params_online_async.yaml'),
+        # ISPRAVKA: Koristi student_assignment_02, ne stage_ros2!
+        default_value=os.path.join(
+            student_share,
+            'config', 'mapper_params_online_async.yaml'),
         description='Full path to the ROS2 parameters file to use for the slam_toolbox node')
 
+    # Stage koristi 'laser' frame za /base_scan
+    # Trebamo transform: laser -> base_link
+    laser_to_base_link_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        output='screen',
+        arguments=['0', '0', '-0.15', '0', '0', '0', '1', 'laser', 'base_link'],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+    # Asynchronous SLAM Toolbox Node
     start_async_slam_toolbox_node = Node(
         parameters=[
           slam_params_file,
@@ -29,12 +56,20 @@ def generate_launch_description():
         package='slam_toolbox',
         executable='async_slam_toolbox_node',
         name='slam_toolbox',
-        output='screen')
+        output='screen',
+        emulate_tty=True,
+        remappings=[
+            ('/scan', '/base_scan'),  # Stage koristi /base_scan
+            ('tf', 'tf'),
+            ('tf_static', 'tf_static'),
+        ]
+    )
 
     ld = LaunchDescription()
 
     ld.add_action(declare_use_sim_time_argument)
     ld.add_action(declare_slam_params_file_cmd)
+    ld.add_action(laser_to_base_link_tf)
     ld.add_action(start_async_slam_toolbox_node)
 
     return ld
