@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Map View Launch File - V5 (FINAL FIX)
+Map View Launch File - V6 (LIFECYCLE MANAGER)
 Prikazi Stage simulator s mapom iz mapped_maps/ direktorija
 
-FINAL FIX: mapped_maps je u student-assignment-02/, ne u parent
-Putanja: student-assignment-02/mapped_maps/map_01/map_01.yaml
+UPGRADE: Dodaj Lifecycle Manager da Map Server kontinuirano objavljuje /map
 
 Usage:
     ros2 launch student_assignment_02 map_view_launch.py
@@ -26,8 +25,7 @@ def generate_launch_description():
     student_config_dir = os.path.join(student_share, 'config')
     student_world_dir = os.path.join(student_share, 'world')
     
-    # FINAL FIX: mapped_maps je u student-assignment-02/ direktoriju
-    # Putanja: ~/FSB/projektiranje-autonomnih-sustava/student-assignment-02/mapped_maps/
+    # Koristi directnu putanju do student-assignment-02/
     student_assignment_root = os.path.expanduser(
         '~/FSB/projektiranje-autonomnih-sustava/student-assignment-02'
     )
@@ -54,12 +52,11 @@ def generate_launch_description():
     world_file = os.path.join(student_world_dir, 'map_01.world')
 
     print(f"\n" + "="*70)
-    print(f"map_view_launch.py V5 - FINAL FIX")
+    print(f"map_view_launch.py V6 - LIFECYCLE MANAGER")
     print(f"="*70)
     print(f"Student assignment root: {student_assignment_root}")
     print(f"Mapped maps dir:         {mapped_maps_dir}")
     print(f"Map file:                {map_file}")
-    print(f"World file:              {world_file}")
     print(f"="*70)
     print()
 
@@ -67,14 +64,6 @@ def generate_launch_description():
     if not os.path.exists(map_file):
         print(f"⚠️  WARNING: Map file ne postoji!")
         print(f"   Tražim u: {map_file}")
-        print()
-        print(f"   Kreiraj direktorij:")
-        print(f"   mkdir -p {os.path.dirname(map_file)}")
-        print()
-        print(f"   Ako trebam mapu - spremi je:")
-        print(f"   1. ros2 launch student_assignment_02 mapping_complete_launch.py")
-        print(f"   2. ros2 run nav2_map_server map_saver_cli -f ~/temp_map")
-        print(f"   3. cp ~/temp_map.* {os.path.dirname(map_file)}/map_01.*")
         print()
     else:
         print(f"✅ Map file pronađen: {os.path.basename(map_file)}")
@@ -157,7 +146,24 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 5. RVIZ - Vizualizacija
+    # 5. LIFECYCLE MANAGER - Aktivira Map Server automatski
+    # ====================================================================
+    # Ovo je VAŽNO! Map Server se ne pokreće automatski,
+    # trebam lifecycle manager da ga aktivira
+    lifecycle_manager = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager',
+        output='screen',
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'autostart': True},
+            {'node_names': ['map_server']}
+        ]
+    )
+
+    # ====================================================================
+    # 6. RVIZ - Vizualizacija
     # ====================================================================
     rviz_node = Node(
         package='rviz2',
@@ -178,5 +184,6 @@ def generate_launch_description():
         laser_to_base_link_tf,
         robot_state_publisher,
         map_server_node,
+        lifecycle_manager,  # NOVO - aktivira map_server
         rviz_node,
     ])
