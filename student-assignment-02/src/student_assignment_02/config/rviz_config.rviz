@@ -7,9 +7,12 @@ Panels:
         - /Global Options1
         - /Status1
         - /Map1
+<<<<<<< HEAD
         - /Map1/Update Topic1
         - /Odometry1
         - /Odometry1/Shape1
+=======
+>>>>>>> 334f8346fd312c2ce2640f41c0d9015a1cd161fe
       Splitter Ratio: 0.5
     Tree Height: 324
   - Class: rviz_common/Selection
@@ -61,7 +64,7 @@ Visualization Manager:
       Name: Map
       Topic:
         Depth: 5
-        Durability Policy: Volatile
+        Durability Policy: Transient Local
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable

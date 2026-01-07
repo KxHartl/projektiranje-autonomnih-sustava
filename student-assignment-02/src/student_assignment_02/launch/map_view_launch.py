@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Map View Launch File - V7 (RVIZ CONFIG + FRAME FIX)
+Map View Launch File - V9 (MAP REPUBLISHER)
 Prikazi Stage simulator s mapom iz mapped_maps/ direktorija
 
-V7: 
-- RViz koristi rviz_config.rviz
-- Fiksaj "frame map does not exist" problem
-- Map Server se pokreće prije RViz-a
+V9: 
+- Dodajem Map Republisher node
+- Kontinuirano re-objavljuje /map s Transient Local QoS
+- Fiksam problem gdje nav2_map_server ne objavljuje /map automatski
 
 Usage:
     ros2 launch student_assignment_02 map_view_launch.py
@@ -59,7 +59,7 @@ def generate_launch_description():
     world_file = os.path.join(student_world_dir, 'map_01.world')
 
     print(f"\n" + "="*70)
-    print(f"map_view_launch.py V7 - RVIZ CONFIG + FRAME FIX")
+    print(f"map_view_launch.py V9 - MAP REPUBLISHER")
     print(f"="*70)
     print(f"Student assignment root: {student_assignment_root}")
     print(f"Mapped maps dir:         {mapped_maps_dir}")
@@ -109,9 +109,8 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 2. STATIC TF: map -> odom (ZA FIKSATI FRAME PROBLEM)
+    # 2. STATIC TF: map -> odom
     # ====================================================================
-    # Ovo je VAŽNO - map frame mora biti u TF tree
     map_to_odom_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -156,7 +155,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 5. MAP SERVER - Ucitaj spremenljenu mapu iz mapped_maps/map_01/
+    # 5. MAP SERVER - Ucitaj mapu
     # ====================================================================
     map_server_node = Node(
         package='nav2_map_server',
@@ -166,7 +165,7 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             {'yaml_filename': map_file},
-            {'use_sim_time': use_sim_time}
+            {'use_sim_time': use_sim_time},
         ],
         remappings=[
             ('/map', '/map'),
@@ -175,7 +174,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 6. LIFECYCLE MANAGER - Aktivira Map Server automatski
+    # 6. LIFECYCLE MANAGER - Aktivira Map Server
     # ====================================================================
     lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
@@ -190,7 +189,18 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 7. RVIZ - Vizualizacija s konfiguracijom
+    # 7. MAP REPUBLISHER - KONTINUIRANO OBJAVLJUJE /map (NOVO!)
+    # ====================================================================
+    map_republisher_node = Node(
+        package='student_assignment_02',
+        executable='map_republisher',
+        name='map_republisher',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+    # ====================================================================
+    # 8. RVIZ - Vizualizacija s konfiguracijom
     # ====================================================================
     rviz_node = Node(
         package='rviz2',
@@ -199,7 +209,7 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(use_rviz),
         arguments=[
-            '-d', rviz_config_file  # NOVO - koristi config file
+            '-d', rviz_config_file
         ],
         parameters=[{'use_sim_time': use_sim_time}]
     )
@@ -211,10 +221,11 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_rviz,
         stage_node,
-        map_to_odom_tf,  # NOVO - fiksaj map frame
+        map_to_odom_tf,
         laser_to_base_link_tf,
         robot_state_publisher,
         map_server_node,
         lifecycle_manager,
+        map_republisher_node,  # NOVO!
         rviz_node,
     ])
