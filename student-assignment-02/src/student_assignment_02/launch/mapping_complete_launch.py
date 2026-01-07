@@ -43,6 +43,10 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_rviz = LaunchConfiguration('rviz')
 
+    # Direktna path do world datoteke
+    world_file = os.path.join(student_world_dir, 'map_01.world')
+    slam_params_file = os.path.join(student_config_dir, 'mapper_params_online_async.yaml')
+
     # ====================================================================
     # 1. STAGE SIMULATOR
     # ====================================================================
@@ -53,7 +57,7 @@ def generate_launch_description():
         output='screen',
         emulate_tty=True,
         parameters=[{
-            'world_file': os.path.join(student_world_dir, 'map_01.world'),
+            'world_file': world_file,
             'enforce_prefixes': False,
             'use_stamped_velocity': False,
             'use_static_transformations': False,  # Dinamičke transformacije!
@@ -66,7 +70,18 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 2. ROBOT STATE PUBLISHER - Za TF između base_link i base_scan
+    # 2. STATIC TF: laser -> base_link (Za SLAM mapiranje)
+    # ====================================================================
+    laser_to_base_link_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        output='screen',
+        arguments=['0', '0', '-0.15', '0', '0', '0', '1', 'laser', 'base_link'],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+    # ====================================================================
+    # 3. ROBOT STATE PUBLISHER - Za TF između base_link i base_scan
     # ====================================================================
     robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -90,24 +105,8 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 3. STATIC TF: laser -> base_link (Za SLAM mapiranje)
-    # ====================================================================
-    laser_to_base_link_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        output='screen',
-        arguments=['0', '0', '-0.15', '0', '0', '0', '1', 'laser', 'base_link'],
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
-
-    # ====================================================================
     # 4. SLAM TOOLBOX - Online Asynchronous Mapping
     # ====================================================================
-    slam_params_file = os.path.join(
-        student_config_dir, 
-        'mapper_params_online_async.yaml'
-    )
-
     slam_toolbox_node = Node(
         package='slam_toolbox',
         executable='async_slam_toolbox_node',
@@ -147,8 +146,8 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_rviz,
         stage_node,
-        robot_state_publisher,
         laser_to_base_link_tf,
+        robot_state_publisher,
         slam_toolbox_node,
         rviz_node,
     ])
