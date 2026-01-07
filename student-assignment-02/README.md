@@ -82,14 +82,14 @@ colcon build --symlink-install
 source install/setup.bash
 
 **✅ INSTALACIJA GOTOVA!**
+```
 
----
 
-## 🗺️ KORAK 1: Mapiranje
+### 🗺️ KORAK 1: Mapiranje
 
 **Cilj**: Mapirati okruženje pomo­ću SLAM Toolbox-a
 
-### 1.2 Terminal 2: SLAM Mapping
+### 1.1 Terminal 1: SLAM Mapping
 
 Otvori novi terminal:
 
@@ -182,108 +182,47 @@ U sve terminale, pritisnite **CTRL+C** da zaustaviš sve.
 
 **Cilj**: Lokalizirati robota s AMCL koristeći spremljenu mapu
 
-**Što trebate**: 3-4 otvorena terminala
-
-### 2.1 Terminal 1: Stage Simulator
-
-```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-
-ros2 launch stage_ros2 stage.launch.py
-```
-
-### 2.2 Terminal 2: Lokalizacija
+### 2.1 Terminal 1: Lokalizacija
 
 Otvori novi terminal:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
-# Zamijeni map_05 s brojem vaše mape ako je drugačiji!
-ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_05
+# Zamijeni map_02 s brojem vaše mape ako je drugačiji!
+ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_02
 ```
 
-**Trebali biste vidjeti**: RViz s mapom i crvenim strelicama (particle filter).
+**Trebali biste vidjeti**: RViz s mapom 
 
-### 2.3 Terminal 3: Upravljanje Robotom
+### 2.2 Terminal 2: Upravljanje Robotom
 
 Otvori novi terminal:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 run turtlebot3_teleop teleop_keyboard
 ```
 
-**VA­ŽNO**: Pokrenite robota s **W** tipkom nekoliko puta!
+**VA­ŽNO**: Pokrenite robota s **I** tipkom nekoliko puta!
 
-**Trebalo bi se desiti**: Crvene strelice se počinju okretati u zelene. To znači da se robot lokalizira!
-
-Vozite robota malo više dok se sve strelice ne oklone zelenim.
-
-### 2.4 Provjera TF Transformacija
-
-Otvori novi terminal:
-
-```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-
-ros2 run tf2_tools view_frames
-```
-
-Provjerite je li mapa → odom → base_link dostupna:
-
-```bash
-ros2 run tf2_ros tf2_echo map base_link
-```
-
-Trebalo bi vidjeti koordinate bez greške.
 
 **✅ LOKALIZACIJA GOTOVA!**
 
-### 2.5 Zaustavi Simulatore
-
-U svim terminalima, pritisnite **CTRL+C**.
-
----
 
 ## 🎯 KORAK 3: A* Path Planning
 
 **Cilj**: Planirati putanju s A* algoritmom
 
-**Što trebate**: 5 otvorenih terminala
-
-### 3.1 Terminal 1: Stage Simulator
-
-```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-
-ros2 launch stage_ros2 stage.launch.py
-```
-
-### 3.2 Terminal 2: Lokalizacija
+### 3.1 Terminal 1: A* Path Planner
 
 Otvori novi terminal:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-
-# Zamijeni map_05 s brojem vaše mape!
-ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_05
-```
-
-### 3.3 Terminal 3: A* Path Planner
-
-Otvori novi terminal:
-
-```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 launch student_assignment_02 a_star_path_planner.launch.py
@@ -292,40 +231,9 @@ ros2 launch student_assignment_02 a_star_path_planner.launch.py
 **Trebali biste vidjeti**:
 ```
 [INFO] A* Path Planner Node: Started
-[INFO] Inflation distance: 0.2m
+[INFO] Inflation distance: 0.5m
 [INFO] Koristi base_link za početnu točku
 ```
-
-### 3.4 Terminal 4: RViz
-
-Otvori novi terminal:
-
-```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-
-ros2 run rviz2 rviz2
-```
-
-**RViz prozor će se otvoriti.**
-
-### 3.5 RViz Konfiguracija
-
-**U RViz-u**:
-
-1. **Gornji lijevo**, kliknite na **Fixed Frame** dropdown
-2. Izaberite **map**
-
-3. Kliknite **Add** (gumb dolje lijevo)
-4. Kliknite **By topic**
-5. Dodaj ove topic-e:
-   - `/map` → OccupancyGrid ✅
-   - `/planned_path` → Path ✅
-   - `/path_planning_visualization` → Marker ✅
-   - `/inflation_buffer_visualization` → Marker ✅
-
-**Trebali biste vidjeti mapu i inflation buffer (narančasti kubici).**
-
 ### 3.6 Postavljanje Cilja
 
 **U RViz-u**:
@@ -337,7 +245,7 @@ ros2 run rviz2 rviz2
 
 **Trebalo bi se desiti**: 
 - 🟢 **Zelena linija** se pojavljuje (to je vaša putanja!)
-- 🟠 **Narančasti kubici** pokazuju buffer (0.2m od zidova)
+- 🟠 **Narančasti kubici** pokazuju buffer (0.5 m od zidova)
 - 🔴 **Sive sfere** pokazuju istraživane stanice
 - 🟡 **Žute sfere** pokazuju čelnu frontu algoritma
 
@@ -368,7 +276,7 @@ ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_
 ### A* Path Planner - Custom Parametri
 
 ```bash
-# Primjer: Manji buffer (0.15m umjesto 0.2m)
+# Primjer: Manji buffer (0.15 m umjesto 0.5 m)
 ros2 launch student_assignment_02 a_star_path_planner.launch.py inflation_distance_m:=0.15
 
 # Primjer: Više iteracija
@@ -387,7 +295,7 @@ ros2 launch student_assignment_02 a_star_path_planner.launch.py allow_diagonal:=
 **Rješenje**: Trebate source-ati setup:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 ```
 
@@ -396,7 +304,7 @@ source install/setup.bash
 **Rješenje**: Očisti i pokušaj ponovno:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 rm -rf build/ install/ log/
 colcon build --packages-select student_assignment_02 --symlink-install
 ```
@@ -412,12 +320,6 @@ ros2 topic list | grep slam
 ```
 
 Trebalo bi vidjeti `/slam_toolbox/...` topic-e.
-
-### Problem: Lokalizacija se ne javlja
-
-**Trebalo bi**: Crvene strelice postanu zelene nakon što vozite robota.
-
-**Ako ne postaju**: Vozite robota više (W tipka) duže vremenske.
 
 ### Problem: Putanja nije pronađena
 
@@ -459,7 +361,7 @@ Trebalo bi vidjeti `/slam_toolbox/...` topic-e.
 
 **Stari kod**: GitHub history:
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava
 git log --oneline
 ```
 
@@ -507,7 +409,7 @@ ros2 topic echo /map --once
 ## 📁 Direktorij Struktura
 
 ```
-~/autonomni-robotika/
+~/zadaca_02_ws/
 └── projektiranje-autonomnih-sustava/
     └── student-assignment-02/
         ├── src/student_assignment_02/
@@ -528,37 +430,6 @@ ros2 topic echo /map --once
         ├── README.md              ← OVI FAJL
         └── ...
 ```
-
----
-
-## 🚀 Brzi Start (Nakon Instalacije)
-
-Ako ste završili instalaciju i mapiranje:
-
-```bash
-# Terminal 1
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-ros2 launch stage_ros2 stage.launch.py
-
-# Terminal 2
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_05
-
-# Terminal 3
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-ros2 launch student_assignment_02 a_star_path_planner.launch.py
-
-# Terminal 4
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-ros2 run rviz2 rviz2
-
-# U RViz: Postavite cilj s 2D Goal Pose
-```
-
 ---
 
 ## 📚 Dodatne Informacije
