@@ -13,7 +13,7 @@ slam_toolbox:
     odom_frame: odom
     map_frame: map
     base_frame: base_link
-    scan_topic: /base_scan  # VAŽNO: Stage koristi /base_scan
+    scan_topic: /base_scan  # Stage koristi /base_scan topic
     use_map_saver: true
     mode: mapping  # mapping ili localization
 
