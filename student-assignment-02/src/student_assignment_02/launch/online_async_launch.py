@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Online Asynchronous SLAM Launch File
+Koristi slam_toolbox za mapiranje okoline u realnom vremenu
+"""
+
 import os
 
 from launch import LaunchDescription
@@ -15,12 +22,15 @@ def generate_launch_description():
         'use_sim_time',
         default_value='true',
         description='Use simulation/Gazebo clock')
+    
     declare_slam_params_file_cmd = DeclareLaunchArgument(
         'slam_params_file',
-        default_value=os.path.join(get_package_share_directory("student_assignment_02"),
-                                   'config', 'mapper_params_online_async.yaml'),
+        default_value=os.path.join(
+            get_package_share_directory("student_assignment_02"),
+            'config', 'mapper_params_online_async.yaml'),
         description='Full path to the ROS2 parameters file to use for the slam_toolbox node')
 
+    # Asynchronous SLAM Toolbox Node
     start_async_slam_toolbox_node = Node(
         parameters=[
           slam_params_file,
@@ -30,11 +40,15 @@ def generate_launch_description():
         executable='async_slam_toolbox_node',
         name='slam_toolbox',
         output='screen',
+        emulate_tty=True,
         remappings=[
-            ('/scan', '/base_scan'),  # Mapira stage scan na expected topic
+            # Stage koristi /base_scan za laser podatke
+            ('/scan', '/base_scan'),
+            # TF topics
             ('tf', 'tf'),
             ('tf_static', 'tf_static'),
-        ])
+        ]
+    )
 
     ld = LaunchDescription()
 
