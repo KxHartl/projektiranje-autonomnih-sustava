@@ -1,76 +1,93 @@
+#!/usr/bin/env python3
+"""
+setup.py za student_assignment_02 ROS 2 Python paket
+
+Ovo je ispravljeno kako bi sigurno pronašlo student_assignment_02 direktorij
+s __init__.py datotekom.
+"""
+
 from setuptools import setup, find_packages
 import os
 from glob import glob
 
 package_name = 'student_assignment_02'
 
-# Base directory of this package (this file's directory)
-package_dir = os.path.dirname(os.path.realpath(__file__))
+# Pronađi sve packages u current direktoriju
+# where='.' znači počni od trenutnog direktorija
+# include=['student_assignment_02'] znači pronađi samo ovaj package
+packages = find_packages(where='.', include=['student_assignment_02*'])
 
-print(f"[INFO] Package directory: {package_dir}")
-print(f"[INFO] Contents: {os.listdir(package_dir)}")
-print(f"[INFO] Contents of subdir: {os.listdir(os.path.join(package_dir, package_name))}")
+print(f"\n=== SETUP.PY DEBUG ===")
+print(f"Current working directory: {os.getcwd()}")
+print(f"Script location: {os.path.dirname(os.path.abspath(__file__))}")
+print(f"Packages found: {packages}")
+print(f"Contents of current dir: {os.listdir('.')}")
 
-# Find all packages - KLJUČNA ISPRAVKA!
-packages = find_packages(where='.', include=[f'{package_name}', f'{package_name}.*'])
-
-print(f"[INFO] Found packages: {packages}")
+if os.path.isdir(package_name):
+    print(f"Contents of {package_name}: {os.listdir(package_name)}")
+    if '__init__.py' in os.listdir(package_name):
+        print(f"✓ {package_name}/__init__.py EXISTS")
+    else:
+        print(f"✗ {package_name}/__init__.py MISSING!")
+else:
+    print(f"✗ {package_name} direktorij ne postoji!")
 
 if not packages:
-    raise RuntimeError(f"ERROR: No packages found! Check directory structure.")
+    raise RuntimeError(
+        f"\n[ERROR] find_packages() nije pronašao niti jedan package!\n"
+        f"Provjera:\n"
+        f"1. Je li {package_name}/__init__.py kreiran?\n"
+        f"2. Je li struktura ispravna?\n"
+        f"   src/student_assignment_02/\n"
+        f"   ├── student_assignment_02/ (package direktorij)\n"
+        f"   │   ├── __init__.py\n"
+        f"   │   ├── a_star_path_planner.py\n"
+        f"   │   └── ..."
+    )
 
-# Base data files (sources must be relative paths)
-data_files = [
-    ('share/ament_index/resource_index/packages', [os.path.join('resource', package_name)]),
-    ('share/' + package_name, ['package.xml']),
-]
+print(f"=== SETUP.PY DEBUG GOTOV ===\n")
 
-# add launch, config, world files if present (use relative source paths)
-launch_dir = os.path.join(package_dir, 'launch')
-if os.path.isdir(launch_dir):
-    launch_files = [os.path.join('launch', f) for f in os.listdir(launch_dir) if f.endswith('.py')]
+# Pronađi sve data files
+data_files = []
+
+# Resource file
+data_files.append(('share/ament_index/resource_index/packages', [os.path.join('resource', package_name)]))
+
+# package.xml
+data_files.append(('share/' + package_name, ['package.xml']))
+
+# Launch files
+if os.path.isdir('launch'):
+    launch_files = glob('launch/*.py')
     if launch_files:
         data_files.append(('share/' + package_name + '/launch', launch_files))
 
-config_dir = os.path.join(package_dir, 'config')
-if os.path.isdir(config_dir):
-    rviz_files = [os.path.join('config', f) for f in os.listdir(config_dir) if f.endswith('.rviz')]
-    yaml_files = [os.path.join('config', f) for f in os.listdir(config_dir) if f.endswith('.yaml')]
-    if rviz_files:
-        data_files.append(('share/' + package_name + '/config', rviz_files))
-    if yaml_files:
-        data_files.append(('share/' + package_name + '/config', yaml_files))
+# Config files
+if os.path.isdir('config'):
+    config_files = glob('config/*.yaml') + glob('config/*.rviz')
+    if config_files:
+        data_files.append(('share/' + package_name + '/config', config_files))
 
-world_dir = os.path.join(package_dir, 'world')
-if os.path.isdir(world_dir):
-    world_files = [os.path.join('world', f) for f in os.listdir(world_dir) if f.endswith('.world')]
-    png_files = [os.path.join('world', f) for f in os.listdir(world_dir) if f.endswith('.png')]
+# World files
+if os.path.isdir('world'):
+    world_files = glob('world/*.world') + glob('world/*.png')
     if world_files:
         data_files.append(('share/' + package_name + '/world', world_files))
-    if png_files:
-        data_files.append(('share/' + package_name + '/world', png_files))
-    include_dir = os.path.join(world_dir, 'include')
-    if os.path.isdir(include_dir):
-        include_files = [os.path.join('world', 'include', f) for f in os.listdir(include_dir) if f.endswith('.inc')]
-        if include_files:
-            data_files.append(('share/' + package_name + '/world/include', include_files))
+    # Include files
+    include_files = glob('world/include/*.inc')
+    if include_files:
+        data_files.append(('share/' + package_name + '/world/include', include_files))
 
-# If mapped_maps exists inside the package, include all files and preserve
-# subdirectory structure by adding a tuple per directory. Source paths
-# must be relative to the package directory (no leading slash).
-mapped_maps_root = os.path.join(package_dir, 'mapped_maps')
-if os.path.isdir(mapped_maps_root):
-    for root, dirs, files in os.walk(mapped_maps_root):
-        if not files:
-            continue
-        rel = os.path.relpath(root, package_dir)
-        # rel will be like 'mapped_maps' or 'mapped_maps/map_01'
-        dest_rel = rel.replace('mapped_maps', os.path.join('mapped_maps'))
-        src_paths = [os.path.join(rel, f) for f in files]
-        dest = os.path.join('share', package_name, rel)
-        data_files.append((dest, src_paths))
+# Mapped maps
+if os.path.isdir('mapped_maps'):
+    for root, dirs, files in os.walk('mapped_maps'):
+        if files:
+            rel_path = os.path.relpath(root, '.')
+            dest = os.path.join('share', package_name, rel_path)
+            src_files = [os.path.join(rel_path, f) for f in files]
+            data_files.append((dest, src_files))
 
-print(f"[INFO] Data files count: {len(data_files)}")
+print(f"Data files: {len(data_files)} directories\n")
 
 setup(
     name=package_name,
@@ -81,7 +98,7 @@ setup(
     zip_safe=True,
     maintainer='khartl',
     maintainer_email='kh239762@fsb.hr',
-    description='ROS2 Python package for autonomous system mapping and path planning',
+    description='ROS2 Python package for autonomous system mapping and path planning using A* algorithm',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
