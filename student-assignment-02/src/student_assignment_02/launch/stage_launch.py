@@ -14,6 +14,7 @@ def generate_launch_description():
     # Tvoj paket
     student_share = get_package_share_directory('student_assignment_02')
     student_config_dir = os.path.join(student_share, 'config')
+    student_world_dir = os.path.join(student_share, 'world')
 
     # Argumenti
     declare_world = DeclareLaunchArgument(
@@ -40,6 +41,7 @@ def generate_launch_description():
         description='Use simulation time'
     )
 
+    world_arg = LaunchConfiguration('world')
     use_stage = LaunchConfiguration('stage')
     use_rviz = LaunchConfiguration('rviz')
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -54,13 +56,13 @@ def generate_launch_description():
         condition=IfCondition(use_stage),
         parameters=[{
             'world_file': os.path.join(
-                student_share, 
-                'world', 
+                student_world_dir, 
                 'map_01.world'
             ),
             'enforce_prefixes': False,  # VAŽNO: False da bi topici bili dostupni
             'use_stamped_velocity': False,
-            'use_static_transformations': True,
+            'use_static_transformations': False,  # Trebamo dinamičke transformacije
+            'publish_ground_truth': True,  # Važno za SLAM debugging
         }],
         output='screen',
         emulate_tty=True,
@@ -104,7 +106,7 @@ def generate_launch_description():
         package='tf2_ros',
         executable='static_transform_publisher',
         output='screen',
-        arguments=['0', '0', '0', '0', '0', '0', 'odom', 'base_link'],
+        arguments=['0', '0', '0', '0', '0', '0', '1', 'odom', 'base_link'],  # Dodao quaternion (0,0,0,1)
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
