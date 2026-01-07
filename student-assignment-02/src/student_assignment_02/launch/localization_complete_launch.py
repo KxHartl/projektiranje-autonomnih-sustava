@@ -31,11 +31,7 @@ def generate_launch_description():
     student_share = get_package_share_directory('student_assignment_02')
     student_config_dir = os.path.join(student_share, 'config')
     student_world_dir = os.path.join(student_share, 'world')
-    
-    # Path do mape - koristi apsolutni path iz workspace-a
-    # Pretpostavka: mapped_maps se nalazi u student-assignment-02/mapped_maps
-    workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(student_share)))
-    mapped_maps_dir = os.path.join(workspace_root, 'mapped_maps', 'map_01', 'map_01.yaml')
+    student_mapped_maps_dir = os.path.join(student_share, 'mapped_maps')
 
     # ====================================================================
     # LAUNCH ARGUMENTI
@@ -60,7 +56,7 @@ def generate_launch_description():
 
     declare_map_yaml = DeclareLaunchArgument(
         'map',
-        default_value=mapped_maps_dir,
+        default_value=os.path.join(student_mapped_maps_dir, 'map_01', 'map_01.yaml'),
         description='Full path to map yaml file to load'
     )
 
