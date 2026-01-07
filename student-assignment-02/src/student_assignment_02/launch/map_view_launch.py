@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Map View Launch File - V2
+Map View Launch File - V3 (SIMPLIFIED)
 Prikazi Stage simulator s mapom iz mapped_maps/ direktorija
 
-Mape su organizirane kao:
-student-assignment-02/mapped_maps/map_01/map_01.yaml
-student-assignment-02/mapped_maps/map_01/map_01.pgm
+Simplified verzija koja koristi explicitnu putanju umjesto PythonExpression
+za izbjegavanje problema s dinamičkim putanjama.
 
 Usage:
     ros2 launch student_assignment_02 map_view_launch.py
     ros2 launch student_assignment_02 map_view_launch.py map_number:=1
-    ros2 launch student_assignment_02 map_view_launch.py map_number:=2
 """
 
 import os
@@ -19,7 +17,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -29,11 +27,15 @@ def generate_launch_description():
     student_config_dir = os.path.join(student_share, 'config')
     student_world_dir = os.path.join(student_share, 'world')
     
-    # Direktorij za spremenljene mape
-    # student-assignment-02/mapped_maps/ (parent direktorij od src/student_assignment_02)
-    # Trebam ici gore do student-assignment-02 direktorija
+    # Direktorij za spremenljene mape - APSOLUTNA PUTANJA
+    # student-assignment-02 je parent od src/
+    # student-assignment-02/src/../mapped_maps/ = student-assignment-02/mapped_maps/
     student_root = os.path.dirname(os.path.dirname(student_share))
     mapped_maps_dir = os.path.join(student_root, 'mapped_maps')
+    
+    # Za map_number - korisimo samo default map_01 (kasnije se može proširiti)
+    # Pojednostavljujemo - uvijek koristi map_01
+    map_file = os.path.join(mapped_maps_dir, 'map_01', 'map_01.yaml')
 
     # Argumenti
     declare_use_sim_time = DeclareLaunchArgument(
@@ -48,23 +50,26 @@ def generate_launch_description():
         description='Launch RViz'
     )
 
-    # Map number argument - izbira između map_01, map_02, itd
-    declare_map_number = DeclareLaunchArgument(
-        'map_number',
-        default_value='1',
-        description='Map number (1, 2, 3, ...) - učitava iz mapped_maps/map_XX/'
-    )
-
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_rviz = LaunchConfiguration('rviz')
-    map_number = LaunchConfiguration('map_number')
 
     # Direktna path do world datoteke
     world_file = os.path.join(student_world_dir, 'map_01.world')
-    
-    # Konstruiraj path do mape s PythonExpression
-    # mapped_maps/map_01/map_01.yaml za map_number=1
-    map_file = PythonExpression([f"'{mapped_maps_dir}/map_' + str(", map_number, ") + '/map_' + str(", map_number, ") + '.yaml'"])
+
+    print(f"\n" + "="*60)
+    print(f"map_view_launch.py V3 - SIMPLIFIED")
+    print(f"="*60)
+    print(f"Map file: {map_file}")
+    print(f"World file: {world_file}")
+    print(f"Mapped maps dir: {mapped_maps_dir}")
+    print(f"="*60 + "\n")
+
+    # Provjeri da li mapa postoji
+    if not os.path.exists(map_file):
+        print(f"⚠️  WARNING: Map file ne postoji: {map_file}")
+        print(f"   Kreiraj direktorij:")
+        print(f"   mkdir -p {os.path.dirname(map_file)}")
+        print(f"\n")
 
     # ====================================================================
     # 1. STAGE SIMULATOR
@@ -124,7 +129,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 4. MAP SERVER - Ucitaj spremenljenu mapu iz mapped_maps/map_XX/
+    # 4. MAP SERVER - Ucitaj spremenljenu mapu iz mapped_maps/map_01/
     # ====================================================================
     map_server_node = Node(
         package='nav2_map_server',
@@ -143,7 +148,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 5. RVIZ - Vizualizacija
+    # 5. RVIZ - Vizualizacija (NOVA - bez rviz_config.rviz)
     # ====================================================================
     rviz_node = Node(
         package='rviz2',
@@ -151,9 +156,7 @@ def generate_launch_description():
         name='rviz2',
         output='screen',
         condition=IfCondition(use_rviz),
-        arguments=[
-            '-d', os.path.join(student_config_dir, 'rviz_config.rviz')
-        ],
+        # Koristi samo default RViz bez config file-a (izbjeći probleme)
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
@@ -163,7 +166,6 @@ def generate_launch_description():
     return LaunchDescription([
         declare_use_sim_time,
         declare_rviz,
-        declare_map_number,
         stage_node,
         laser_to_base_link_tf,
         robot_state_publisher,
