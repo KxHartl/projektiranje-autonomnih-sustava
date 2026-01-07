@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Map View Launch File - V7 (RVIZ CONFIG + FRAME FIX)
+Map View Launch File - V8 (KONTINUIRANO OBJAVLJUJE /map)
 Prikazi Stage simulator s mapom iz mapped_maps/ direktorija
 
-V7: 
-- RViz koristi rviz_config.rviz
-- Fiksaj "frame map does not exist" problem
-- Map Server se pokreće prije RViz-a
+V8: 
+- Map Server KONTINUIRANO objavljuje /map (svaku sekundu)
+- RViz koristi Transient Local QoS
+- Sve je optimizirano za map display
 
 Usage:
     ros2 launch student_assignment_02 map_view_launch.py
@@ -59,7 +59,7 @@ def generate_launch_description():
     world_file = os.path.join(student_world_dir, 'map_01.world')
 
     print(f"\n" + "="*70)
-    print(f"map_view_launch.py V7 - RVIZ CONFIG + FRAME FIX")
+    print(f"map_view_launch.py V8 - KONTINUIRANO OBJAVLJUJE /map")
     print(f"="*70)
     print(f"Student assignment root: {student_assignment_root}")
     print(f"Mapped maps dir:         {mapped_maps_dir}")
@@ -111,7 +111,6 @@ def generate_launch_description():
     # ====================================================================
     # 2. STATIC TF: map -> odom (ZA FIKSATI FRAME PROBLEM)
     # ====================================================================
-    # Ovo je VAŽNO - map frame mora biti u TF tree
     map_to_odom_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -156,7 +155,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 5. MAP SERVER - Ucitaj spremenljenu mapu iz mapped_maps/map_01/
+    # 5. MAP SERVER - Kontinuirano objavljuje /map
     # ====================================================================
     map_server_node = Node(
         package='nav2_map_server',
@@ -166,7 +165,8 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             {'yaml_filename': map_file},
-            {'use_sim_time': use_sim_time}
+            {'use_sim_time': use_sim_time},
+            {'publish_interval': 1.0},  # NOVO! Objavljuj /map svaku sekundu
         ],
         remappings=[
             ('/map', '/map'),
@@ -199,7 +199,7 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(use_rviz),
         arguments=[
-            '-d', rviz_config_file  # NOVO - koristi config file
+            '-d', rviz_config_file
         ],
         parameters=[{'use_sim_time': use_sim_time}]
     )
@@ -211,7 +211,7 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_rviz,
         stage_node,
-        map_to_odom_tf,  # NOVO - fiksaj map frame
+        map_to_odom_tf,
         laser_to_base_link_tf,
         robot_state_publisher,
         map_server_node,
