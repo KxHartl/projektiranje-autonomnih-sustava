@@ -3,6 +3,7 @@
 A* Path Planner Node
 Koristi A* algoritam za planiranje putanje na 2D mapi
 Vizualizira pretraživanje prostora u RViz-u
+Podržavas dinamiki goal pose iz RViza (2D Goal Pose)
 """
 
 import rclpy
@@ -39,6 +40,14 @@ class AStarPathPlanner(Node):
             qos
         )
         
+        # Subscribe na goal pose iz RViza (2D Goal Pose tool)
+        self.goal_subscription = self.create_subscription(
+            PoseStamped,
+            '/goal_pose',
+            self.goal_pose_callback,
+            10  # Regular QoS za goal pose
+        )
+        
         # Publisher za putanju
         self.path_publisher = self.create_publisher(
             Path,
@@ -63,6 +72,7 @@ class AStarPathPlanner(Node):
         self.map_data = None
         self.map_metadata = None
         self.marker_id_counter = 0
+        self.goal_received = False
         
         # Parametri planiranja
         self.declare_parameter('inflation_radius', 1)  # u stanicama
@@ -75,10 +85,36 @@ class AStarPathPlanner(Node):
         self.inflation_radius = self.get_parameter('inflation_radius').value
         self.allow_diagonal = self.get_parameter('allow_diagonal').value
         
+        # Trenutni goal
+        self.current_goal_x = self.get_parameter('goal_x').value
+        self.current_goal_y = self.get_parameter('goal_y').value
+        self.current_start_x = self.get_parameter('start_x').value
+        self.current_start_y = self.get_parameter('start_y').value
+        
         self.get_logger().info('A* Path Planner Node: Started')
+        self.get_logger().info('Slusa na /goal_pose za dinamicki goal (RViz 2D Goal Pose)')
+    
+    def goal_pose_callback(self, msg: PoseStamped):
+        """
+        Primanje goal pose iz RViza (2D Goal Pose tool)
+        """
+        self.current_goal_x = msg.pose.position.x
+        self.current_goal_y = msg.pose.position.y
+        self.goal_received = True
+        
+        self.get_logger().info(
+            f'Nova goal pose primljena iz RViza: '
+            f'({self.current_goal_x:.2f}, {self.current_goal_y:.2f})'
+        )
+        
+        # Ako je mapa dostupna, planiraj putanju odmah
+        if self.map_data is not None:
+            self.plan_and_publish()
     
     def map_callback(self, msg: OccupancyGrid):
-        """Primanje mape i planiranje putanje"""
+        """
+        Primanje mape i planiranje putanje
+        """
         self.map_data = msg.data
         self.map_metadata = msg.info
         
@@ -87,11 +123,19 @@ class AStarPathPlanner(Node):
             f'rezolucija: {msg.info.resolution:.3f} m/stanica'
         )
         
+        # Ako je goal postavljen, planiraj putanju
+        if self.goal_received:
+            self.plan_and_publish()
+    
+    def plan_and_publish(self):
+        """
+        Planiraj putanju i objavi je
+        """
         # Uzmi parametre
-        goal_x = self.get_parameter('goal_x').value
-        goal_y = self.get_parameter('goal_y').value
-        start_x = self.get_parameter('start_x').value
-        start_y = self.get_parameter('start_y').value
+        goal_x = self.current_goal_x
+        goal_y = self.current_goal_y
+        start_x = self.current_start_x
+        start_y = self.current_start_y
         
         # Pretvori world koordinate u grid koordinate
         start_grid = self.world_to_grid(start_x, start_y)
@@ -114,7 +158,9 @@ class AStarPathPlanner(Node):
         self.visualize_search(explored_cells, frontier)
     
     def world_to_grid(self, x: float, y: float) -> Tuple[int, int]:
-        """Pretvori world koordinate u grid koordinate"""
+        """
+        Pretvori world koordinate u grid koordinate
+        """
         if not self.map_metadata:
             return (0, 0)
         
@@ -132,7 +178,9 @@ class AStarPathPlanner(Node):
         return (grid_x, grid_y)
     
     def grid_to_world(self, grid_x: int, grid_y: int) -> Tuple[float, float]:
-        """Pretvori grid koordinate u world koordinate"""
+        """
+        Pretvori grid koordinate u world koordinate
+        """
         if not self.map_metadata:
             return (0.0, 0.0)
         
@@ -146,7 +194,9 @@ class AStarPathPlanner(Node):
         return (world_x, world_y)
     
     def is_valid_cell(self, x: int, y: int, threshold: int = 50) -> bool:
-        """Provjeri je li stanica valjana (slobodna)"""
+        """
+        Provjeri je li stanica valjana (slobodna)
+        """
         if not self.map_metadata or not self.map_data:
             return False
         
@@ -166,7 +216,9 @@ class AStarPathPlanner(Node):
         return cell_value < threshold  # < 50 = slobodno
     
     def get_neighbors(self, cell: Tuple[int, int]) -> List[Tuple[int, int]]:
-        """Dobij sve valjane susjede stanice"""
+        """
+        Dobij sve valjane susjede stanice
+        """
         x, y = cell
         neighbors = []
         
@@ -190,13 +242,17 @@ class AStarPathPlanner(Node):
         return neighbors
     
     def heuristic(self, cell: Tuple[int, int], goal: Tuple[int, int]) -> float:
-        """Heuristička funkcija (Euklidska distanca)"""
+        """
+        Heuristička funkcija (Euklidska distanca)
+        """
         dx = cell[0] - goal[0]
         dy = cell[1] - goal[1]
         return math.sqrt(dx * dx + dy * dy)
     
     def get_cost(self, cell1: Tuple[int, int], cell2: Tuple[int, int]) -> float:
-        """Trošak kretanja između dvije stanice"""
+        """
+        Trošak kretanja između dvije stanice
+        """
         dx = cell2[0] - cell1[0]
         dy = cell2[1] - cell1[1]
         # Dijagonala = sqrt(2), ortogonalno = 1
@@ -289,7 +345,9 @@ class AStarPathPlanner(Node):
         return None, explored, frontier_cells
     
     def publish_path(self, path: List[Tuple[int, int]]):
-        """Objavi pronađenu putanju"""
+        """
+        Objavi pronađenu putanju
+        """
         ros_path = Path()
         ros_path.header.frame_id = 'map'
         ros_path.header.stamp = self.get_clock().now().to_msg()
@@ -314,7 +372,9 @@ class AStarPathPlanner(Node):
         explored: List[Tuple[int, int]], 
         frontier: List[Tuple[int, int]]
     ):
-        """Vizualiziraj pretraživanje u RViz-u"""
+        """
+        Vizualiziraj pretraživanje u RViz-u
+        """
         
         # Vizualizacija istrživanih stanica
         explored_markers = MarkerArray()
