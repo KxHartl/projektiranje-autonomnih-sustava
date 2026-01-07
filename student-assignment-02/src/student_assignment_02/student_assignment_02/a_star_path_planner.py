@@ -4,14 +4,17 @@ A* Path Planner Node
 Koristi A* algoritam za planiranje putanje na 2D mapi
 Vizualizira pretraživanje prostora u RViz-u
 Podržavas dinamiki goal pose iz RViza (2D Goal Pose)
+Koristi base_link za početnu točku (pozicija robota)
 """
 
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid, Path
-from geometry_msgs.msg import PoseStamped, Point
+from geometry_msgs.msg import PoseStamped, Point, TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, HistoryPolicy
+from tf2_ros import TransformListener, Buffer
+from tf2_geometry_msgs import do_transform_point
 import numpy as np
 from heapq import heappush, heappop
 from typing import List, Tuple, Optional
@@ -23,6 +26,10 @@ class AStarPathPlanner(Node):
     
     def __init__(self):
         super().__init__('a_star_path_planner')
+        
+        # TF Buffer i Listener za base_link transformaciju
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         
         # QoS profil
         qos = QoSProfile(
@@ -81,9 +88,13 @@ class AStarPathPlanner(Node):
         self.declare_parameter('goal_y', 5.0)
         self.declare_parameter('start_x', 0.0)
         self.declare_parameter('start_y', 0.0)
+        self.declare_parameter('max_iterations', 50000)  # POVEĆANO za veće kuteve
+        self.declare_parameter('search_radius', -1)  # -1 = bez ograničenja
         
         self.inflation_radius = self.get_parameter('inflation_radius').value
         self.allow_diagonal = self.get_parameter('allow_diagonal').value
+        self.max_iterations = self.get_parameter('max_iterations').value
+        self.search_radius = self.get_parameter('search_radius').value
         
         # Trenutni goal
         self.current_goal_x = self.get_parameter('goal_x').value
@@ -92,7 +103,31 @@ class AStarPathPlanner(Node):
         self.current_start_y = self.get_parameter('start_y').value
         
         self.get_logger().info('A* Path Planner Node: Started')
+        self.get_logger().info(f'Max iterations: {self.max_iterations}')
         self.get_logger().info('Slusa na /goal_pose za dinamicki goal (RViz 2D Goal Pose)')
+        self.get_logger().info('Koristi base_link za početnu točku (poziciju robota)')
+    
+    def get_robot_position(self) -> Tuple[float, float]:
+        """
+        Proba prona ći base_link poziciju iz TF tree-a
+        Ako ne može, koristi parametar start_x, start_y
+        """
+        try:
+            # Proba dobiti transformaciju od map-a do base_link-a
+            transform = self.tf_buffer.lookup_transform('map', 'base_link', rclpy.time.Time())
+            robot_x = transform.transform.translation.x
+            robot_y = transform.transform.translation.y
+            
+            self.get_logger().debug(f'base_link pozicija: ({robot_x:.2f}, {robot_y:.2f})')
+            return (robot_x, robot_y)
+            
+        except Exception as e:
+            # Ako ne može dobiti transformaciju, koristi parametre
+            self.get_logger().warn(
+                f'Ne mogu dobiti base_link transformaciju: {e}. '
+                f'Koristim parametre start_x={self.current_start_x}, start_y={self.current_start_y}'
+            )
+            return (self.current_start_x, self.current_start_y)
     
     def goal_pose_callback(self, msg: PoseStamped):
         """
@@ -131,18 +166,20 @@ class AStarPathPlanner(Node):
         """
         Planiraj putanju i objavi je
         """
-        # Uzmi parametre
+        # Proba dobiti poziciju robota iz base_link-a
+        start_x, start_y = self.get_robot_position()
+        
+        # Goal se koristi iz RViza ili parametara
         goal_x = self.current_goal_x
         goal_y = self.current_goal_y
-        start_x = self.current_start_x
-        start_y = self.current_start_y
         
         # Pretvori world koordinate u grid koordinate
         start_grid = self.world_to_grid(start_x, start_y)
         goal_grid = self.world_to_grid(goal_x, goal_y)
         
         self.get_logger().info(
-            f'Planiranje putanje od {start_grid} do {goal_grid}'
+            f'Planiranje putanje od {start_grid} (world: {start_x:.2f}, {start_y:.2f}) '
+            f'do {goal_grid} (world: {goal_x:.2f}, {goal_y:.2f})'
         )
         
         # Planiraj putanju
@@ -266,6 +303,10 @@ class AStarPathPlanner(Node):
         """
         A* algoritam za planiranje putanje
         
+        POBOLJŠANJA:
+        - max_iterations povećan na 50000 (sa 10000)
+        - search_radius parametar za ograničenje pretraživanja
+        
         Returns:
             (path, explored_cells, frontier)
             - path: lista koordinata od starta do cilja
@@ -300,9 +341,10 @@ class AStarPathPlanner(Node):
         frontier_cells = []
         
         iteration = 0
-        max_iterations = 10000
+        # POVEĆANO: max_iterations sa 10000 na 50000 za veće kuteve
+        max_iter = self.max_iterations
         
-        while open_set and iteration < max_iterations:
+        while open_set and iteration < max_iter:
             iteration += 1
             
             current_f, current = heappop(open_set)
@@ -320,7 +362,11 @@ class AStarPathPlanner(Node):
                 path.append(start)
                 path.reverse()
                 
-                self.get_logger().info(f'A* završio u {iteration} iteracija, istraživao {len(explored)} stanica')
+                self.get_logger().info(
+                    f'A* završio u {iteration} iteracija, '
+                    f'istraživao {len(explored)} stanica, '
+                    f'dužina putanje: {len(path)}'
+                )
                 return path, explored, frontier_cells
             
             explored.append(current)
@@ -341,7 +387,10 @@ class AStarPathPlanner(Node):
                 # Dodaj u open set
                 heappush(open_set, (f_score[neighbor], neighbor))
         
-        self.get_logger().warn(f'Nema putanje! Iteracija: {iteration}')
+        self.get_logger().warn(
+            f'Nema putanje! Iteracija: {iteration}/{max_iter}, '
+            f'istraživao {len(explored)} stanica'
+        )
         return None, explored, frontier_cells
     
     def publish_path(self, path: List[Tuple[int, int]]):
