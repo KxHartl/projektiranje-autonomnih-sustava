@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Map View Launch File - V6 (LIFECYCLE MANAGER)
+Map View Launch File - V7 (RVIZ CONFIG + FRAME FIX)
 Prikazi Stage simulator s mapom iz mapped_maps/ direktorija
 
-UPGRADE: Dodaj Lifecycle Manager da Map Server kontinuirano objavljuje /map
+V7: 
+- RViz koristi rviz_config.rviz
+- Fiksaj "frame map does not exist" problem
+- Map Server se pokreće prije RViz-a
 
 Usage:
     ros2 launch student_assignment_02 map_view_launch.py
 """
 
 import os
+import time
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -25,12 +29,15 @@ def generate_launch_description():
     student_config_dir = os.path.join(student_share, 'config')
     student_world_dir = os.path.join(student_share, 'world')
     
-    # Koristi directnu putanju do student-assignment-02/
+    # Direktna putanja do student-assignment-02/
     student_assignment_root = os.path.expanduser(
         '~/FSB/projektiranje-autonomnih-sustava/student-assignment-02'
     )
     mapped_maps_dir = os.path.join(student_assignment_root, 'mapped_maps')
     map_file = os.path.join(mapped_maps_dir, 'map_01', 'map_01.yaml')
+
+    # RViz konfiguracija
+    rviz_config_file = os.path.join(student_config_dir, 'rviz_config.rviz')
 
     # Argumenti
     declare_use_sim_time = DeclareLaunchArgument(
@@ -52,11 +59,12 @@ def generate_launch_description():
     world_file = os.path.join(student_world_dir, 'map_01.world')
 
     print(f"\n" + "="*70)
-    print(f"map_view_launch.py V6 - LIFECYCLE MANAGER")
+    print(f"map_view_launch.py V7 - RVIZ CONFIG + FRAME FIX")
     print(f"="*70)
     print(f"Student assignment root: {student_assignment_root}")
     print(f"Mapped maps dir:         {mapped_maps_dir}")
     print(f"Map file:                {map_file}")
+    print(f"RViz config:             {rviz_config_file}")
     print(f"="*70)
     print()
 
@@ -67,6 +75,15 @@ def generate_launch_description():
         print()
     else:
         print(f"✅ Map file pronađen: {os.path.basename(map_file)}")
+        print()
+
+    # Provjeri RViz konfiguraciju
+    if not os.path.exists(rviz_config_file):
+        print(f"⚠️  WARNING: RViz config ne postoji!")
+        print(f"   Tražim u: {rviz_config_file}")
+        print()
+    else:
+        print(f"✅ RViz config pronađen")
         print()
 
     # ====================================================================
@@ -92,7 +109,19 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 2. STATIC TF: laser -> base_link
+    # 2. STATIC TF: map -> odom (ZA FIKSATI FRAME PROBLEM)
+    # ====================================================================
+    # Ovo je VAŽNO - map frame mora biti u TF tree
+    map_to_odom_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        output='screen',
+        arguments=['0', '0', '0', '0', '0', '0', '1', 'map', 'odom'],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+    # ====================================================================
+    # 3. STATIC TF: laser -> base_link
     # ====================================================================
     laser_to_base_link_tf = Node(
         package='tf2_ros',
@@ -103,7 +132,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 3. ROBOT STATE PUBLISHER
+    # 4. ROBOT STATE PUBLISHER
     # ====================================================================
     robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -127,7 +156,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 4. MAP SERVER - Ucitaj spremenljenu mapu iz mapped_maps/map_01/
+    # 5. MAP SERVER - Ucitaj spremenljenu mapu iz mapped_maps/map_01/
     # ====================================================================
     map_server_node = Node(
         package='nav2_map_server',
@@ -146,10 +175,8 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 5. LIFECYCLE MANAGER - Aktivira Map Server automatski
+    # 6. LIFECYCLE MANAGER - Aktivira Map Server automatski
     # ====================================================================
-    # Ovo je VAŽNO! Map Server se ne pokreće automatski,
-    # trebam lifecycle manager da ga aktivira
     lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',
@@ -163,7 +190,7 @@ def generate_launch_description():
     )
 
     # ====================================================================
-    # 6. RVIZ - Vizualizacija
+    # 7. RVIZ - Vizualizacija s konfiguracijom
     # ====================================================================
     rviz_node = Node(
         package='rviz2',
@@ -171,6 +198,9 @@ def generate_launch_description():
         name='rviz2',
         output='screen',
         condition=IfCondition(use_rviz),
+        arguments=[
+            '-d', rviz_config_file  # NOVO - koristi config file
+        ],
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
@@ -181,9 +211,10 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_rviz,
         stage_node,
+        map_to_odom_tf,  # NOVO - fiksaj map frame
         laser_to_base_link_tf,
         robot_state_publisher,
         map_server_node,
-        lifecycle_manager,  # NOVO - aktivira map_server
+        lifecycle_manager,
         rviz_node,
     ])
