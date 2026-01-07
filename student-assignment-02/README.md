@@ -40,8 +40,8 @@ Ako nemate ROS 2 Humble instaliran, [pratite službenu instalaciju](https://docs
 
 ```bash
 # Kreiraj direktorij gdje će biti projekt
-mkdir -p ~/autonomni-robotika
-cd ~/autonomni-robotika
+mkdir -p ~/zadaca_02_ws
+cd ~/zadaca_02_ws
 
 # Clone repository
 git clone https://github.com/KxHartl/projektiranje-autonomnih-sustava.git
@@ -52,7 +52,7 @@ cd projektiranje-autonomnih-sustava/student-assignment-02
 
 **Trebalo bi biti**:
 ```
-~/autonomni-robotika/
+~/zadaca_02_ws/
 └── projektiranje-autonomnih-sustava/
     └── student-assignment-02/
         ├── src/
@@ -72,14 +72,7 @@ pwd
 rm -rf build/ install/ log/
 
 # Gradi projekt
-colcon build --packages-select student_assignment_02 --symlink-install
-```
-
-**Čekaj dok se gradnja ne završi** (može potrajati 1-2 minute).
-
-Trebalo bi vidjeti na kraju:
-```
-Summary: 1 package finished [XX.XXs]
+colcon build --symlink-install
 ```
 
 ### Korak 3: Source Setup
@@ -88,19 +81,7 @@ Summary: 1 package finished [XX.XXs]
 # Učitaj environment
 source install/setup.bash
 
-# Provjeri da su svi čvorovi dostupni
-ros2 run student_assignment_02 a_star_path_planner --help
-```
-
-Trebalo bi vidjeti help poruku bez greške.
-
 **✅ INSTALACIJA GOTOVA!**
-
-> 💡 **Savjet**: Ako trebate ponovno otvoriti terminal, ponovno pokrenite:
-> ```bash
-> cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-> source install/setup.bash
-> ```
 
 ---
 
@@ -108,25 +89,12 @@ Trebalo bi vidjeti help poruku bez greške.
 
 **Cilj**: Mapirati okruženje pomo­ću SLAM Toolbox-a
 
-**Što trebate**: 5 otvorenih terminala
-
-### 1.1 Terminal 1: Stage Simulator
-
-```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
-source install/setup.bash
-
-ros2 launch stage_ros2 stage.launch.py
-```
-
-**Trebali biste vidjeti**: Simulator prozor s robotom i mapom.
-
 ### 1.2 Terminal 2: SLAM Mapping
 
 Otvori novi terminal:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 launch student_assignment_02 mapping_complete_launch.py
@@ -134,12 +102,12 @@ ros2 launch student_assignment_02 mapping_complete_launch.py
 
 **Trebali biste vidjeti**: RViz prozor s mapom kako se gradi.
 
-### 1.3 Terminal 3: Upravljanje Robotom
+### 1.2 Terminal 2: Upravljanje Robotom
 
 Otvori novi terminal:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 run turtlebot3_teleop teleop_keyboard
@@ -147,30 +115,22 @@ ros2 run turtlebot3_teleop teleop_keyboard
 
 **Trebali biste vidjeti**: Poruka "Publishing twist"
 
-**Upravljanje robotom**:
-- **W** = Naprijed
-- **S** = Unazad
-- **A** = Ljevo
-- **D** = Desno
-- **X** = Stop
-- **Shift + W/A/S/D** = Brži pokret
-
 **Cilj**: Voziš robota po čitavom okruženju da SLAM mapira sve.
 
-**Savjet**: Vozite u U-obliku, pokrivajući sve zidove i kutove. Trebalo bi 2-3 minute.
+**Savjet**: Vozite u U-obliku, pokrivajući sve zidove i kutove.
 
-### 1.4 Terminal 4: Spremi Mapu
+### 1.3 Terminal 3: Spremi Mapu
 
 Otvori novi terminal:
 
 ```bash
-cd ~/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 
 # Provjeri koji je broj zadnje mape
 ls src/student_assignment_02/mapped_maps/
 ```
 
-Videćete nešto kao:
+Vidjećete nešto kao:
 ```
 map_01  map_02  map_03  map_04
 ```
@@ -184,19 +144,19 @@ Ako je zadnja `map_04`, spremi kao `map_05`.
 whoami
 ```
 
-Ako se javlja `jovan`, onda komanda je:
+Ako se javlja `hartl`, onda komanda je:
 
 ```bash
 ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \
   "name:
-    data: '/home/jovan/autonomni-robotika/projektiranje-autonomnih-sustava/student-assignment-02/src/student_assignment_02/mapped_maps/map_05/map_05'"
+    data: '/home/hartl/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02/src/student_assignment_02/mapped_maps/map_05/map_05'"
 ```
 
-> ⚠️ **VAŽNO**: Zamijeni `jovan` sa rezultatom `whoami` komande!
+> ⚠️ **VAŽNO**: Zamijeni `hartl` sa rezultatom `whoami` komande!
 
 **Trebali biste vidjeti**: Poruka "Map saved successfully"
 
-### 1.5 Provjera Sprema Mape
+### 1.4 Provjera Sprema Mape
 
 U istom terminalu:
 
@@ -212,9 +172,9 @@ map_05.yaml  (metapodaci)
 
 **Ako vidite ove datoteke: ✅ MAPIRANJE GOTOVO!**
 
-### 1.6 Zaustavi Simulatore
+### 1.5 Zaustavi Simulatore
 
-U sva 4 terminala, pritisnite **CTRL+C** da zaustaviš sve.
+U sve terminale, pritisnite **CTRL+C** da zaustaviš sve.
 
 ---
 
