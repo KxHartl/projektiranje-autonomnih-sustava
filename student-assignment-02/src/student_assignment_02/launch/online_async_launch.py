@@ -3,6 +3,10 @@
 """
 Online Asynchronous SLAM Launch File
 Koristi slam_toolbox za mapiranje okoline u realnom vremenu
+
+FIX: Laser frame mora biti dostupan SLAM-u
+Stage koristi /base_scan s frame_id='laser'
+Trebamo transform: laser -> base_link (CORRECT DIRECTION!)
 """
 
 import os
@@ -30,13 +34,16 @@ def generate_launch_description():
             'config', 'mapper_params_online_async.yaml'),
         description='Full path to the ROS2 parameters file to use for the slam_toolbox node')
 
-    # Stage koristi 'laser' frame, ali trebamo 'base_scan' frame
-    # Dodajemo static transform da mapira laser -> base_link
+    # Stage koristi 'laser' frame za /base_scan
+    # Trebamo transform: laser -> base_link (omogućava SLAM-u da transformira laser podatke)
     laser_to_base_link_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         output='screen',
-        arguments=['0', '0', '0.15', '0', '0', '0', '1', 'base_link', 'laser'],
+        # Format: x y z roll pitch yaw qx qy qz qw parent child
+        # Laser je 0.15m IZNAD base_link-a
+        # Trebamo transform koji ide: laser -> base_link (laser je parent, base_link je child)
+        arguments=['0', '0', '-0.15', '0', '0', '0', '1', 'laser', 'base_link'],
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
@@ -64,7 +71,7 @@ def generate_launch_description():
 
     ld.add_action(declare_use_sim_time_argument)
     ld.add_action(declare_slam_params_file_cmd)
-    ld.add_action(laser_to_base_link_tf)  # Dodajemo TF transform
-    ld.add_action(start_async_slam_toolbox_node)
+    ld.add_action(laser_to_base_link_tf)  # PRVO objavljujemo TF!
+    ld.add_action(start_async_slam_toolbox_node)  # ZATIM SLAM
 
     return ld
