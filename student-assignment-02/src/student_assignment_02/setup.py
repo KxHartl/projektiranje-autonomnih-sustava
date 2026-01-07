@@ -7,6 +7,11 @@ package_name = 'student_assignment_02'
 # Base directory of this package (this file's directory)
 package_dir = os.path.dirname(os.path.realpath(__file__))
 
+# Find all packages (trebam biti specifičan)
+packages = find_packages(where='', include=['student_assignment_02', 'student_assignment_02.*'])
+
+print(f"[INFO] Found packages: {packages}")
+
 # Base data files (sources must be relative paths)
 data_files = [
     ('share/ament_index/resource_index/packages', [os.path.join('resource', package_name)]),
@@ -58,11 +63,12 @@ if os.path.isdir(mapped_maps_root):
         dest = os.path.join('share', package_name, rel)
         data_files.append((dest, src_paths))
 
+print(f"[INFO] Data files: {data_files}")
 
 setup(
     name=package_name,
     version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    packages=packages,
     data_files=data_files,
     install_requires=['setuptools'],
     zip_safe=True,
@@ -73,10 +79,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'a_star_path_planner = student_assignment_02.a_star_path_planner:main',
+            'map_republisher = student_assignment_02.map_republisher:main',
             'path_planning_node = student_assignment_02.path_planning_node:main',
             'goal_navigation_node = student_assignment_02.goal_navigation_node:main',
-            'map_republisher = student_assignment_02.map_republisher:main',
-            'a_star_path_planner = student_assignment_02.a_star_path_planner:main',
         ],
     },
 )
