@@ -1,17 +1,27 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Stage Simulator Launch File - Adapted for student_assignment_02
+Koristi world datoteke iz student_assignment_02/world direktorija
+
+Usage:
+    ros2 launch student_assignment_02 stage_launch.py
+    ros2 launch student_assignment_02 stage_launch.py world:=map_01
+"""
+
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.substitutions import LaunchConfiguration, TextSubstitution
-from launch.actions import DeclareLaunchArgument, OpaqueFunction, SetLaunchConfiguration
+from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
-
-    this_directory = get_package_share_directory('stage_ros2')
+    # Koristi student_assignment_02 paket, ne stage_ros2!
+    student_share = get_package_share_directory('student_assignment_02')
+    student_world_dir = os.path.join(student_share, 'world')
 
     use_stamped_velocity = LaunchConfiguration('use_stamped_velocity')
     use_stamped_velocity_arg = DeclareLaunchArgument(
@@ -19,11 +29,11 @@ def generate_launch_description():
         default_value='false',
         description='on true stage will accept TwistStamped command messages')
     
+    # World argument - trebalo bi biti map_01 ili druga mapa iz student_assignment_02/world
     stage_world_arg = DeclareLaunchArgument(
         'world',
-        default_value=TextSubstitution(text='cave'),
-        description='World file relative to the project world file, without .world')
-
+        default_value=TextSubstitution(text='map_01'),  # Default: map_01
+        description='World file relative to student_assignment_02/world, without .world')
 
     enforce_prefixes = LaunchConfiguration('enforce_prefixes')
     enforce_prefixes_arg = DeclareLaunchArgument(
@@ -34,39 +44,45 @@ def generate_launch_description():
     use_static_transformations = LaunchConfiguration('use_static_transformations')
     use_static_transformations_arg = DeclareLaunchArgument(
         'use_static_transformations',
-        default_value='true',
+        default_value='false',  # ISPRAVKA: Trebamo dinamičke transformacije!
         description='Use static transformations for sensor frames!')
 
-    one_tf_tree = LaunchConfiguration('one_tf_tree')
-    one_tf_tree_arg = DeclareLaunchArgument(
-        'one_tf_tree',
-        default_value='false',
-        description='on true all tfs are published with a namespace on /tf and /tf_static')
-    
-    def stage_world_configuration(context):
-        file = os.path.join(
-            this_directory,
-            'world',
-            context.launch_configurations['world'] + '.world')
-        return [SetLaunchConfiguration('world_file', file)]
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='true',
+        description='Use simulation time')
 
-    stage_world_configuration_arg = OpaqueFunction(function=stage_world_configuration)
+    world_arg = LaunchConfiguration('world')
+    
+    # Konstruiraj world file path
+    world_file = os.path.join(student_world_dir, world_arg, '.world')
+    
+    # Stage node
+    stage_node = Node(
+        package='stage_ros2',
+        executable='stage_ros2',
+        name='stage',
+        output='screen',
+        emulate_tty=True,
+        parameters=[{
+            'world_file': os.path.join(student_world_dir, 'map_01.world'),  # Hardcode map_01
+            'enforce_prefixes': enforce_prefixes,
+            'use_stamped_velocity': use_stamped_velocity,
+            'use_static_transformations': use_static_transformations,
+            'publish_ground_truth': True,  # Za debugging
+        }],
+        remappings=[
+            ('/odom', '/odom'),
+            ('/base_pose_ground_truth', '/ground_truth'),
+        ]
+    )
 
     return LaunchDescription([
         use_stamped_velocity_arg,
         stage_world_arg,
-        one_tf_tree_arg, 
         enforce_prefixes_arg, 
-        use_static_transformations_arg, 
-        stage_world_configuration_arg,
-        Node(
-            package='stage_ros2',
-            executable='stage_ros2',
-            name='stage',
-            parameters=[{'one_tf_tree': one_tf_tree,
-                        'enforce_prefixes': enforce_prefixes,
-                        'use_stamped_velocity': use_stamped_velocity,
-                        'use_static_transformations': use_static_transformations,
-                "world_file": [LaunchConfiguration('world_file')]}],
-        )
+        use_static_transformations_arg,
+        use_sim_time_arg,
+        stage_node,
     ])
