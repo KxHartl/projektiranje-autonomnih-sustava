@@ -6,6 +6,8 @@ Vizualizira pretraživanje prostora u RViz-u
 Podržava dinamiki goal pose iz RViza (2D Goal Pose)
 Koristi base_link za početnu točku (pozicija robota) - SVAKI PUT!
 Dodao: Inflation buffer od 0.2m oko zidova za sigurnu putanju
+
+KRITIČNO FIX: get_robot_position() se poziva SVAKI PUT s novim TF lookup-om!
 """
 
 import rclpy
@@ -118,36 +120,45 @@ class AStarPathPlanner(Node):
         # Mapa s inflacijom (kreširana nakon primanja mape)
         self.inflated_map = None
         
+        self.get_logger().info('='*80)
         self.get_logger().info('A* Path Planner Node: Started')
         self.get_logger().info(f'Max iterations: {self.max_iterations}')
-        self.get_logger().info(f'Inflation distance: {self.inflation_distance_m}m (0.2m = 20cm)')
-        self.get_logger().info('Slusa na /goal_pose za dinamicki goal (RViz 2D Goal Pose)')
-        self.get_logger().info('Koristi base_link za početnu točku (poziciju robota) - SVAKI PUT!')
+        self.get_logger().info(f'Inflation distance: {self.inflation_distance_m}m')
+        self.get_logger().info('Sluša na /goal_pose za dinamicki goal (RViz 2D Goal Pose)')
+        self.get_logger().info('[KRITIČNO] Koristi base_link za početnu točku - SVAKI PUT!')
+        self.get_logger().info('='*80)
     
     def get_robot_position(self) -> Tuple[float, float]:
         """
         Proba pronaći base_link poziciju iz TF tree-a
-        KRITIČNO: Ova funkcija se poziva SVAKI PUT da bi se dobila SVEŽA pozicija!
+        
+        KRITIčNO: Ova funkcija se UVIJEK poziva s novim lookup_transform() poziVom!
+        Nikada se ne cache-ira!
         """
         try:
-            # SVAKI PUT traži transformaciju - nemoj je cachirati!
+            # KRITIČNO: Svaki put novi lookup_transform() - NIKADA cachirati!
             transform = self.tf_buffer.lookup_transform(
                 'map', 
                 'base_link', 
-                rclpy.time.Time(),  # SADA
+                rclpy.time.Time(),  # Sadnje vrijeme
                 timeout=rclpy.duration.Duration(seconds=1.0)
             )
             robot_x = transform.transform.translation.x
             robot_y = transform.transform.translation.y
             
-            self.get_logger().info(f'[TF] base_link pozicija: ({robot_x:.2f}, {robot_y:.2f})')
+            self.get_logger().info(
+                f'[BASE_LINK] SVEŽA pozicija iz TF: ({robot_x:.2f}, {robot_y:.2f})'
+            )
             return (robot_x, robot_y)
             
         except Exception as e:
-            # Ako ne može dobiti transformaciju, koristi parametre
+            # Ako TF lookup fail-uje, koristi fallback
             self.get_logger().warn(
-                f'Ne mogu dobiti base_link transformaciju: {e}. '
-                f'Koristim parametre start_x={self.current_start_x}, start_y={self.current_start_y}'
+                f'[TF_ERROR] lookup_transform() failed: {e}'
+            )
+            self.get_logger().warn(
+                f'[FALLBACK] Koristim param start_x={self.current_start_x}, '
+                f'start_y={self.current_start_y}'
             )
             return (self.current_start_x, self.current_start_y)
     
@@ -258,7 +269,7 @@ class AStarPathPlanner(Node):
         while queue:
             cx, cy, dist = queue.popleft()
             
-            # Ako je to prepreka
+            # Ako je stanica prepreka
             idx = cy * width + cx
             if self.map_data[idx] >= self.inflation_cost_threshold:
                 return dist
@@ -279,22 +290,40 @@ class AStarPathPlanner(Node):
     def plan_and_publish(self):
         """
         Planiraj putanju i objavi je
-        KRITIčNO: get_robot_position() se poziva SVAKI PUT!
+        
+        KRITIčNO: get_robot_position() se poziva OVDJE s novim lookup-om!
         """
-        # SVAKI PUT dobij svježa pozicija robota iz TF-a!
-        start_x, start_y = self.get_robot_position()
+        # =================================================================
+        # KRITIČNO: Pozovi get_robot_position() koji radi NOVI lookup!
+        # =================================================================
+        robot_x, robot_y = self.get_robot_position()
         
         # Goal se koristi iz RViza ili parametara
         goal_x = self.current_goal_x
         goal_y = self.current_goal_y
         
+        self.get_logger().info(
+            f'\n[PLAN_START] Planiranje putanje:'
+        )
+        self.get_logger().info(
+            f'  Robot: ({robot_x:.2f}, {robot_y:.2f})'
+        )
+        self.get_logger().info(
+            f'  Goal:  ({goal_x:.2f}, {goal_y:.2f})'
+        )
+        
         # Pretvori world koordinate u grid koordinate
-        start_grid = self.world_to_grid(start_x, start_y)
+        start_grid = self.world_to_grid(robot_x, robot_y)
         goal_grid = self.world_to_grid(goal_x, goal_y)
         
         self.get_logger().info(
-            f'[PLAN] Planiranje putanje od {start_grid} (world: {start_x:.2f}, {start_y:.2f}) '
-            f'do {goal_grid} (world: {goal_x:.2f}, {goal_y:.2f})'
+            f'[PLAN_CONVERT] Grid koordinate:'
+        )
+        self.get_logger().info(
+            f'  Start grid: {start_grid}'
+        )
+        self.get_logger().info(
+            f'  Goal grid:  {goal_grid}'
         )
         
         # Planiraj putanju
@@ -302,9 +331,9 @@ class AStarPathPlanner(Node):
         
         if path:
             self.publish_path(path)
-            self.get_logger().info(f'Putanja pronađena! Dužina: {len(path)} stanica')
+            self.get_logger().info(f'[PLAN_SUCCESS] Putanja pronađena! Dužina: {len(path)} stanica')
         else:
-            self.get_logger().warn('Putanja nije pronađena!')
+            self.get_logger().warn('[PLAN_FAIL] Putanja nije pronađena!')
         
         # Vizualiziraj pretraživanje
         self.visualize_search(explored_cells, frontier)
