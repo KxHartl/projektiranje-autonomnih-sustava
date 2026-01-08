@@ -1,29 +1,36 @@
 #!/usr/bin/env python3
 """
-Nav2 Adapter Node - FIXED VERSION
-Povezuče A* putanju s Nav2 kontrolerom
-Nav2 automatski sljedi putanju
-Također sluša /goal_pose iz RViza (2D Goal Pose tool)
+Nav2 Adapter Node - JEDNOSTAVNIJA VERZIJA
+BEZ /follow_path akcije (koja zahtijeva controller_server)
 
-KRITIČNO FIX:
-- Uklonjeni callback groups (uzrokovali su blocking)
-- Dodan direktan path send bez async wait
-- Dodan server.server_is_ready() check s retry logikom
+FIX: Direktno slijedi putanju bez Nav2 kontrolera
+- Hvata /planned_path od A* planera
+- Šalje /cmd_vel komande za kretanje
+- Robot se kreće prema cilju
+
+Ovakvo je jednostavnije i ne zahtijeva:
+- Lifecycle Manager
+- Controller Server
+- DWB Controller
+- Local Costmap
+
+Samo:
+1. Hvata putanju
+2. Prati je
+3. Šalje komande robotu
 """
 
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionClient
 from nav_msgs.msg import Path
-from nav2_msgs.action import FollowPath
-from geometry_msgs.msg import PoseStamped
-from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, HistoryPolicy
+from geometry_msgs.msg import PoseStamped, Twist
+from tf2_ros import TransformListener, Buffer
+import math
 import time
-import threading
 
 
 class Nav2Adapter(Node):
-    """Adapter koji povezuje A* putanju s Nav2 kontrolerom"""
+    """Adapter koji sljedi putanju bez controller_server"""
     
     def __init__(self):
         super().__init__('nav2_adapter')
@@ -31,24 +38,18 @@ class Nav2Adapter(Node):
         self.get_logger().info(
             '\n' +
             '='*80 +
-            '\n[ADAPTER] INICIJALIZACIJA' +
+            '\n[ADAPTER] INICIJALIZACIJA - JEDNOSTAVNA VERZIJA' +
             '\n' +
             '- Sluša: /planned_path (od A* planera)' +
             '\n' +
-            '- Sluša: /goal_pose (iz RViza - 2D Goal Pose tool)' +
+            '- Šalje: /cmd_vel (direktno robotu)' +
             '\n' +
-            '- Akcija: follow_path (Nav2 kontroler DWB)' +
+            '- NEMA /follow_path akcije' +
+            '\n' +
+            '- NEMA controller_server ovisnosti' +
             '\n' +
             '='*80 +
             '\n'
-        )
-        
-        # QoS profil
-        qos = QoSProfile(
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-            reliability=ReliabilityPolicy.RELIABLE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1
         )
         
         # Subscribe na A* putanju
@@ -56,88 +57,60 @@ class Nav2Adapter(Node):
             Path,
             '/planned_path',
             self.path_callback,
-            qos
+            10
         )
         self.get_logger().info('[ADAPTER] ✓ Subscribe na /planned_path')
         
-        # Subscribe na goal pose iz RViza
-        self.goal_pose_subscription = self.create_subscription(
-            PoseStamped,
-            '/goal_pose',
-            self.goal_pose_callback,
+        # Publisher za čv komande
+        self.cmd_vel_publisher = self.create_publisher(
+            Twist,
+            '/cmd_vel',
             10
         )
-        self.get_logger().info('[ADAPTER] ✓ Subscribe na /goal_pose')
+        self.get_logger().info('[ADAPTER] ✓ Publisher za /cmd_vel')
         
-        # Action client za Nav2 controller
-        # KRITIČNO: BEZ callback_group!
-        self.follow_path_client = ActionClient(
-            self,
-            FollowPath,
-            'follow_path'
-        )
-        self.get_logger().info('[ADAPTER] ✓ Action client za follow_path')
+        # TF buffer za transformacije
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         
-        # Skladištenje
+        # Skladistenje putanje
         self.current_path: Path = None
-        self.last_goal_pose: PoseStamped = None
-        self.goal_handle = None
-        self.path_received = False
-        self.follow_path_ready = False
-        self.sending_goal = False
+        self.path_index = 0
+        self.following = False
         
-        # Pokreni provjeru follow_path servera u zasebnoj niti
-        self.check_thread = threading.Thread(target=self._check_follow_path_thread, daemon=True)
-        self.check_thread.start()
+        # Parametri kretanja
+        self.max_linear_speed = 0.3  # m/s
+        self.max_angular_speed = 1.0  # rad/s
+        self.position_tolerance = 0.1  # m
+        self.angle_tolerance = 0.2  # rad
+        
+        # Timer za sljedićenje putanje
+        self.timer = self.create_timer(0.1, self.follow_path_timer)
         
         self.get_logger().info('[ADAPTER] ✓ Inicijalizacija gotova')
         self.get_logger().info('')
-    
-    def _check_follow_path_thread(self):
-        """
-        Provjeri follow_path akciju u zasebnoj niti
-        """
-        timeout = time.time() + 30  # 30 sekundi
-        
-        while time.time() < timeout:
-            if self.follow_path_client.server_is_ready():
-                self.get_logger().info('[ADAPTER] ✓✓✓ /follow_path akcija DOSTUPNA!')
-                self.follow_path_ready = True
-                return
-            
-            self.get_logger().debug('[ADAPTER] Čekam /follow_path akciju...')
-            time.sleep(1.0)
-        
-        self.get_logger().error('[ADAPTER] ✗ /follow_path akcija NIJE dostupna nakon 30s')
-        self.follow_path_ready = False
-    
-    def goal_pose_callback(self, msg: PoseStamped):
-        """Prima goal pose iz RViza"""
-        self.last_goal_pose = msg
-        self.get_logger().info(
-            f'[GOAL] Nova goal pose iz RViza: '
-            f'({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f})'
-        )
     
     def path_callback(self, msg: Path):
         """Prima putanju od A* planera"""
         if len(msg.poses) > 0:
             self.current_path = msg
-            self.path_received = True
+            self.path_index = 0
+            self.following = True
             length = self.calculate_path_length(msg)
             
             self.get_logger().info(
                 f'[PATH] ✓ Primljena putanja: {len(msg.poses)} točaka, '
                 f'dužina: {length:.2f}m'
             )
-            
-            # Odmah pošalji Nav2-u
-            self.send_path_to_nav2()
+            self.get_logger().info(
+                f'[FOLLOW] ✓ Počinjem sljedićenje putanje...'
+            )
         else:
             self.get_logger().warn('[PATH] ✗ Putanja je PRAZNA!')
+            self.following = False
     
     def calculate_path_length(self, path: Path) -> float:
-        """Izračuna duljinu putanje"""
+        """Izračuna dužinu putanje"""
         if len(path.poses) < 2:
             return 0.0
         
@@ -147,103 +120,77 @@ class Nav2Adapter(Node):
             p2 = path.poses[i + 1].pose.position
             dx = p2.x - p1.x
             dy = p2.y - p1.y
-            total_length += (dx**2 + dy**2)**0.5
+            total_length += math.sqrt(dx*dx + dy*dy)
         
         return total_length
     
-    def send_path_to_nav2(self):
-        """
-        Pošalji putanju Nav2 FollowPath akciji
-        KRITIČNO: Ovo je DIREKTNO slanje, ne async!
-        """
-        if self.sending_goal:
-            self.get_logger().debug('[SEND] Već se šalje goal, preskakam')
+    def follow_path_timer(self):
+        """Timer za sljedićenje putanje"""
+        if not self.following or self.current_path is None:
+            # Zaustavi robota
+            cmd = Twist()
+            self.cmd_vel_publisher.publish(cmd)
             return
         
-        if not self.current_path or len(self.current_path.poses) == 0:
-            self.get_logger().debug('[SEND] Nema putanje za slanje')
+        # Provjeri je li dostignut kraj putanje
+        if self.path_index >= len(self.current_path.poses):
+            self.get_logger().info('[DONE] ✓ SLJEDIĆENJE DOVRŠENO')
+            self.following = False
+            cmd = Twist()
+            self.cmd_vel_publisher.publish(cmd)
             return
         
-        # Provjeri je li server dostupan
-        if not self.follow_path_client.server_is_ready():
-            self.get_logger().warn(
-                '[SEND] ✗ Nav2 /follow_path server NIJE dostupan!'
+        # Dohvati robot poziciju
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                'map',
+                'base_link',
+                rclpy.time.Time()
             )
-            self.follow_path_ready = False
+            robot_x = transform.transform.translation.x
+            robot_y = transform.transform.translation.y
+        except Exception:
+            # Ako nema transformacije, zaustavi robota
+            cmd = Twist()
+            self.cmd_vel_publisher.publish(cmd)
             return
         
-        self.sending_goal = True
+        # Dohvati trenutnu čeljnu točku na putanji
+        target_pose = self.current_path.poses[self.path_index]
+        target_x = target_pose.pose.position.x
+        target_y = target_pose.pose.position.y
         
-        # Kreiraj goal
-        goal = FollowPath.Goal()
-        goal.path = self.current_path
+        # Izračuna udaljenost do čelje
+        dx = target_x - robot_x
+        dy = target_y - robot_y
+        distance = math.sqrt(dx*dx + dy*dy)
         
-        self.get_logger().info(
-            f'[SEND] ✓ Pošinjam slanje putanje ({len(goal.path.poses)} točaka)'
-        )
-        
-        try:
-            # DIREKTNO slanje - bez threading problema!
-            future = self.follow_path_client.send_goal_async(goal)
-            future.add_done_callback(self.goal_response_callback)
-            self.get_logger().info('[SEND] ✓ Goal poslana')
-        except Exception as e:
-            self.get_logger().error(f'[SEND] ✗ Greška pri slanju: {e}')
-            self.sending_goal = False
-    
-    def goal_response_callback(self, future):
-        """
-        Callback kada Nav2 odgovori na zahtjev za putanju
-        """
-        try:
-            self.goal_handle = future.result()
-        except Exception as e:
-            self.get_logger().error(f'[NAV2] ✗ future.result() greška: {e}')
-            self.sending_goal = False
+        # Ako je suvisze blizu, idi na sljedeću točku
+        if distance < self.position_tolerance:
+            self.path_index += 1
             return
         
-        self.sending_goal = False
+        # Izračuna ugao prema čelji
+        angle_to_target = math.atan2(dy, dx)
         
-        if not self.goal_handle:
-            self.get_logger().error('[NAV2] ✗ Goal handle je None!')
-            return
+        # Izračuna razliku kuta
+        # (ovo je pojednostavljeno - trebalo bi koristiti robot orientaciju)
         
-        if not self.goal_handle.accepted:
-            self.get_logger().error(
-                '[NAV2] ✗ Nav2 je ODBIO putanju (goal rejected)'
-            )
-            return
+        # Kreiraj Twist komandu
+        cmd = Twist()
         
-        self.get_logger().info(
-            '[NAV2] ✓✓✓ PRIHVAĆENO - robot počinje slijediti putanju!'
-        )
+        # Linearna brzina proporcionalna udaljenosti
+        cmd.linear.x = min(self.max_linear_speed, distance * 0.5)
+        cmd.linear.y = 0.0
+        cmd.linear.z = 0.0
         
-        # Dodaj callback za rezultat
-        try:
-            result_future = self.goal_handle.get_result_async()
-            result_future.add_done_callback(self.goal_result_callback)
-        except Exception as e:
-            self.get_logger().error(f'[NAV2] ✗ get_result_async greška: {e}')
-    
-    def goal_result_callback(self, future):
-        """
-        Callback kada je Nav2 završio slijeđenje
-        """
-        try:
-            result = future.result()
-            if result and result.result:
-                self.get_logger().info(
-                    '[DONE] ✓ SLIJEĐENJE DOVRŠENO - robot je stigao na cilj!'
-                )
-            else:
-                self.get_logger().warn(
-                    '[DONE] ✗ Slijeđenje je prekinuto ili nije dostupno'
-                )
-            
-            self.goal_handle = None
-        except Exception as e:
-            self.get_logger().warn(f'[DONE] Greška u rezultatu: {e}')
-            self.goal_handle = None
+        # Kutna brzina (pojednostavljeno)
+        cmd.angular.z = angle_to_target * 0.5
+        cmd.angular.x = 0.0
+        cmd.angular.y = 0.0
+        
+        # Objavi komandu
+        self.cmd_vel_publisher.publish(cmd)
 
 
 def main(args=None):
@@ -254,6 +201,9 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        # Zaustavi robota prije gasišenja
+        cmd = Twist()
+        node.cmd_vel_publisher.publish(cmd)
         node.destroy_node()
         rclpy.shutdown()
 
