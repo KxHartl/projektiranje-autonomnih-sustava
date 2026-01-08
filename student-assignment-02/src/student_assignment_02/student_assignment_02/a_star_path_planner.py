@@ -4,12 +4,7 @@ A* Path Planner Node - KONTINUIRNA REPLANIRANJE
 
 Korisnik zeli: Kontinuirno se racuna od robot pozicije do cilja
 
-FIX:
-1. Dodaj timer koji kontinuirno replaniraj (svake 0.5s)
-2. Svaki put koristi TRENUTNU robot poziciju (base_link TF)
-3. Koristi zadnji primljeni goal
-4. SVE U MAP FRAMEU
-5. Nema transformacija
+DEBUG verzija: Ispisuje SVE koordinate
 """
 
 import rclpy
@@ -125,6 +120,7 @@ class AStarPathPlanner(Node):
         self.get_logger().info('[DEBUG] Sluša na /goal_pose')
         self.get_logger().info('[DEBUG] TIMER: Replaniraj svake 0.5s od robot pozicije')
         self.get_logger().info('[DEBUG] FRAME: Sve putanje su u MAP frameu')
+        self.get_logger().info('[DEBUG] Ispisuje SVE koordinate!')
         self.get_logger().info('='*80)
         
         # NOVO: Timer za kontinuirnu replaniranje
@@ -167,6 +163,7 @@ class AStarPathPlanner(Node):
         
         self.get_logger().info(
             f'Mapa primljena: {msg.info.width}x{msg.info.height}, '
+            f'resolution: {msg.info.resolution:.3f}m, '
             f'origin: ({msg.info.origin.position.x:.2f}, {msg.info.origin.position.y:.2f})'
         )
     
@@ -188,6 +185,11 @@ class AStarPathPlanner(Node):
         
         self.last_robot_x = robot_x
         self.last_robot_y = robot_y
+        
+        self.get_logger().info(
+            f'\n[TIMER] Replaniram od robot pozicije: ({robot_x:.2f}, {robot_y:.2f}) '
+            f'do goal: ({self.current_goal_x:.2f}, {self.current_goal_y:.2f})'
+        )
         
         # Planiraj od TRENUTNE robot pozicije do goal-a
         self.plan_and_publish(robot_x, robot_y, self.current_goal_x, self.current_goal_y)
@@ -253,10 +255,32 @@ class AStarPathPlanner(Node):
         start_grid = self.world_to_grid(robot_x, robot_y)
         goal_grid = self.world_to_grid(goal_x, goal_y)
         
+        # DEBUG: Ispišu start i goal
+        self.get_logger().info(
+            f'[CONVERT] Robot WORLD: ({robot_x:.3f}, {robot_y:.3f}) -> GRID: {start_grid}'
+        )
+        self.get_logger().info(
+            f'[CONVERT] Goal WORLD:  ({goal_x:.3f}, {goal_y:.3f}) -> GRID: {goal_grid}'
+        )
+        self.get_logger().info(
+            f'[MAP_INFO] Origin: ({self.map_metadata.origin.position.x:.2f}, {self.map_metadata.origin.position.y:.2f}), '
+            f'Resolution: {self.map_metadata.resolution:.3f}m, '
+            f'Size: {self.map_metadata.width}x{self.map_metadata.height}'
+        )
+        
         # Planis putanju
         path, explored_cells, frontier = self.plan_path_astar(start_grid, goal_grid)
         
         if path:
+            # DEBUG: Ispišu sve točke putanje
+            self.get_logger().info(f'[PATH] Pronađena putanja s {len(path)} točaka:')
+            for idx, grid_pos in enumerate(path):
+                world_x, world_y = self.grid_to_world(grid_pos[0], grid_pos[1])
+                if idx == 0 or idx == len(path) - 1 or idx % 10 == 0:
+                    self.get_logger().info(
+                        f'  [{idx:3d}] GRID: ({grid_pos[0]:4d}, {grid_pos[1]:4d}) -> '
+                        f'WORLD: ({world_x:7.3f}, {world_y:7.3f})'
+                    )
             self.publish_path(path)
         else:
             self.get_logger().warn('[PLAN] Putanja nije pronađena!')
@@ -289,6 +313,7 @@ class AStarPathPlanner(Node):
         origin_y = self.map_metadata.origin.position.y
         resolution = self.map_metadata.resolution
         
+        # VAŽNO: Dodaj 0.5 * resolution za centar celije
         world_x = origin_x + (grid_x + 0.5) * resolution
         world_y = origin_y + (grid_y + 0.5) * resolution
         
