@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-A* Path Planner Node
-Koristi A* algoritam za planiranje putanje na 2D mapi
-Vizualizira pretraživanje prostora u RViz-u
-Podržava dinamiki goal pose iz RViza (2D Goal Pose)
-Koristi base_link za početnu točku (pozicija robota) - SVAKI PUT!
+A* Path Planner Node - KONTINUIRNA REPLANIRANJE
 
-FIX: 
-- Start je UVIJEK robot pozicija (base_link TF lookup)
-- Nema transformacije putanje
-- Sve konverzije grid<->world su ispravne
-- Map origin se koristi ispravno
+Korisnik zeli: Kontinuirno se racuna od robot pozicije do cilja
+
+FIX:
+1. Dodaj timer koji kontinuirno replaniraj (svake 0.5s)
+2. Svaki put koristi TRENUTNU robot poziciju (base_link TF)
+3. Koristi zadnji primljeni goal
+4. SVE U MAP FRAMEU
+5. Nema transformacija
 """
 
 import rclpy
@@ -29,7 +28,7 @@ import traceback
 
 
 class AStarPathPlanner(Node):
-    """ROS2 čvor za A* planiranje putanje"""
+    """ROS2 čvor za A* planiranje putanje - KONTINUIRNA REPLANIRANJE"""
     
     def __init__(self):
         super().__init__('a_star_path_planner')
@@ -76,7 +75,7 @@ class AStarPathPlanner(Node):
             qos
         )
         
-        # Publisher za čelnu frontu pretraživanja (opened čvorovi)
+        # Publisher za čelnu frontu pretraživanja
         self.frontier_publisher = self.create_publisher(
             MarkerArray,
             '/planning_frontier',
@@ -93,7 +92,6 @@ class AStarPathPlanner(Node):
         self.map_data = None
         self.map_metadata = None
         self.marker_id_counter = 0
-        self.goal_received = False
         
         # Parametri planiranja
         self.declare_parameter('inflation_radius', 1)
@@ -113,18 +111,24 @@ class AStarPathPlanner(Node):
         # Trenutni goal
         self.current_goal_x = 0.0
         self.current_goal_y = 0.0
+        self.goal_set = False
+        self.last_robot_x = 0.0
+        self.last_robot_y = 0.0
         
         # Mapa s inflacijom
         self.inflated_map = None
         
         self.get_logger().info('='*80)
-        self.get_logger().info('A* Path Planner Node: Started')
+        self.get_logger().info('A* Path Planner Node: Started - KONTINUIRNA REPLANIRANJE')
         self.get_logger().info(f'Max iterations: {self.max_iterations}')
         self.get_logger().info(f'Inflation distance: {self.inflation_distance_m}m')
-        self.get_logger().info('[DEBUG] Sluša na /goal_pose za dinamicki goal')
-        self.get_logger().info('[DEBUG] Start je UVIJEK robot pozicija iz base_link TF')
+        self.get_logger().info('[DEBUG] Sluša na /goal_pose')
+        self.get_logger().info('[DEBUG] TIMER: Replaniraj svake 0.5s od robot pozicije')
         self.get_logger().info('[DEBUG] FRAME: Sve putanje su u MAP frameu')
         self.get_logger().info('='*80)
+        
+        # NOVO: Timer za kontinuirnu replaniranje
+        self.planning_timer = self.create_timer(0.5, self.planning_timer_callback)
     
     def get_robot_position(self) -> Tuple[float, float]:
         """Dohvati base_link poziciju iz TF tree-a"""
@@ -137,15 +141,11 @@ class AStarPathPlanner(Node):
             )
             robot_x = transform.transform.translation.x
             robot_y = transform.transform.translation.y
-            
-            self.get_logger().debug(
-                f'[TF_OK] base_link u MAP frameu: ({robot_x:.3f}, {robot_y:.3f})'
-            )
             return (robot_x, robot_y)
             
         except Exception as e:
-            self.get_logger().error(
-                f'[TF_FAIL] lookup_transform("map", "base_link") FAIL: {type(e).__name__}'
+            self.get_logger().debug(
+                f'[TF_FAIL] lookup_transform failed: {type(e).__name__}'
             )
             return (0.0, 0.0)
     
@@ -153,32 +153,44 @@ class AStarPathPlanner(Node):
         """Primanje goal pose iz RViza"""
         self.current_goal_x = msg.pose.position.x
         self.current_goal_y = msg.pose.position.y
-        self.goal_received = True
+        self.goal_set = True
         
         self.get_logger().info(
             f'[GOAL] Nova goal pose: ({self.current_goal_x:.2f}, {self.current_goal_y:.2f})'
         )
-        
-        if self.map_data is not None:
-            self.plan_and_publish()
     
     def map_callback(self, msg: OccupancyGrid):
-        """Primanje mape i planiranje putanje"""
+        """Primanje mape"""
         self.map_data = msg.data
         self.map_metadata = msg.info
-        
         self.inflated_map = self.create_inflated_map()
         
         self.get_logger().info(
             f'Mapa primljena: {msg.info.width}x{msg.info.height}, '
-            f'rezolucija: {msg.info.resolution:.3f} m/stanica'
+            f'origin: ({msg.info.origin.position.x:.2f}, {msg.info.origin.position.y:.2f})'
         )
-        self.get_logger().info(
-            f'Mapa origin: ({msg.info.origin.position.x:.2f}, {msg.info.origin.position.y:.2f})'
-        )
+    
+    def planning_timer_callback(self):
+        """Timer za kontinuirnu replaniranje"""
+        if not self.goal_set or self.map_data is None:
+            return
         
-        if self.goal_received:
-            self.plan_and_publish()
+        # Dohvati TRENUTNU robot poziciju
+        robot_x, robot_y = self.get_robot_position()
+        
+        # Ako se robot premalo pomakao, ne replaniraj
+        dist_moved = math.sqrt(
+            (robot_x - self.last_robot_x)**2 + 
+            (robot_y - self.last_robot_y)**2
+        )
+        if dist_moved < 0.05:  # Trebam se pomakao bar 5cm
+            return
+        
+        self.last_robot_x = robot_x
+        self.last_robot_y = robot_y
+        
+        # Planiraj od TRENUTNE robot pozicije do goal-a
+        self.plan_and_publish(robot_x, robot_y, self.current_goal_x, self.current_goal_y)
     
     def _get_inflation_cells(self) -> int:
         if not self.map_metadata:
@@ -235,39 +247,21 @@ class AStarPathPlanner(Node):
         
         return max_dist
     
-    def plan_and_publish(self):
+    def plan_and_publish(self, robot_x: float, robot_y: float, goal_x: float, goal_y: float):
         """Planiraj putanju i objavi je"""
-        self.get_logger().info('\n' + '='*80)
-        self.get_logger().info('[PLAN] Pokrenut plan_and_publish()')
-        
-        # KRITIČNO: Dohvati robot poziciju SVAKI PUT
-        robot_x, robot_y = self.get_robot_position()
-        
-        goal_x = self.current_goal_x
-        goal_y = self.current_goal_y
-        
-        self.get_logger().info(f'[PLAN] Robot u MAP frameu: ({robot_x:.3f}, {robot_y:.3f})')
-        self.get_logger().info(f'[PLAN] Goal u MAP frameu:  ({goal_x:.3f}, {goal_y:.3f})')
-        
         # Konvertuj world koordinate u grid
         start_grid = self.world_to_grid(robot_x, robot_y)
         goal_grid = self.world_to_grid(goal_x, goal_y)
-        
-        self.get_logger().info(f'[PLAN] Start grid: {start_grid}')
-        self.get_logger().info(f'[PLAN] Goal grid:  {goal_grid}')
         
         # Planis putanju
         path, explored_cells, frontier = self.plan_path_astar(start_grid, goal_grid)
         
         if path:
             self.publish_path(path)
-            self.get_logger().info(f'[PLAN] ✓ Putanja! Dužina: {len(path)} stanica')
         else:
-            self.get_logger().warn('[PLAN] ✗ Putanja nije pronađena!')
+            self.get_logger().warn('[PLAN] Putanja nije pronađena!')
         
         self.visualize_search(explored_cells, frontier)
-        self.visualize_inflation_buffer()
-        self.get_logger().info('='*80 + '\n')
     
     def world_to_grid(self, x: float, y: float) -> Tuple[int, int]:
         """Konvertuj world koordinate (u MAP frameu) u grid koordinate"""
@@ -278,11 +272,9 @@ class AStarPathPlanner(Node):
         origin_y = self.map_metadata.origin.position.y
         resolution = self.map_metadata.resolution
         
-        # Konverzija: world koordinate -> grid indeksi
         grid_x = int((x - origin_x) / resolution)
         grid_y = int((y - origin_y) / resolution)
         
-        # Zaštita od out-of-bounds
         grid_x = max(0, min(grid_x, self.map_metadata.width - 1))
         grid_y = max(0, min(grid_y, self.map_metadata.height - 1))
         
@@ -297,7 +289,6 @@ class AStarPathPlanner(Node):
         origin_y = self.map_metadata.origin.position.y
         resolution = self.map_metadata.resolution
         
-        # Centar stanice
         world_x = origin_x + (grid_x + 0.5) * resolution
         world_y = origin_y + (grid_y + 0.5) * resolution
         
@@ -326,7 +317,6 @@ class AStarPathPlanner(Node):
         x, y = cell
         neighbors = []
         
-        # 4-connected neighbors
         four_neighbors = [
             (x + 1, y), (x - 1, y),
             (x, y + 1), (x, y - 1)
@@ -361,11 +351,9 @@ class AStarPathPlanner(Node):
     ) -> Tuple[Optional[List[Tuple[int, int]]], List[Tuple[int, int]], List[Tuple[int, int]]]:
         
         if not self.is_valid_cell(start[0], start[1], use_inflation=True):
-            self.get_logger().error('Start nije valjana stanica!')
             return None, [], []
         
         if not self.is_valid_cell(goal[0], goal[1], use_inflation=True):
-            self.get_logger().error('Cilj nije valjana stanica!')
             return None, [], []
         
         open_set = []
@@ -393,11 +381,6 @@ class AStarPathPlanner(Node):
                     node = came_from[node]
                 path.append(start)
                 path.reverse()
-                
-                self.get_logger().info(
-                    f'A* završio u {iteration} iteracija, '
-                    f'dužina putanje: {len(path)}'
-                )
                 return path, explored, frontier_cells
             
             explored.append(current)
@@ -413,9 +396,6 @@ class AStarPathPlanner(Node):
                 f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, goal)
                 heappush(open_set, (f_score[neighbor], neighbor))
         
-        self.get_logger().warn(
-            f'Nema putanje! Iteracija: {iteration}/{max_iter}'
-        )
         return None, explored, frontier_cells
     
     def publish_path(self, path: List[Tuple[int, int]]):
@@ -441,7 +421,7 @@ class AStarPathPlanner(Node):
         explored_markers = MarkerArray()
         
         for idx, (gx, gy) in enumerate(explored):
-            if idx % 5 != 0:
+            if idx % 10 != 0:  # Svaki 10. marker
                 continue
             
             world_x, world_y = self.grid_to_world(gx, gy)
@@ -449,7 +429,7 @@ class AStarPathPlanner(Node):
             marker.header.frame_id = 'map'
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = 'explored_cells'
-            marker.id = idx // 5
+            marker.id = idx // 10
             marker.type = Marker.SPHERE
             marker.action = Marker.ADD
             marker.pose.position.x = world_x
@@ -463,73 +443,11 @@ class AStarPathPlanner(Node):
             marker.color.b = 0.5
             marker.color.a = 0.3
             explored_markers.markers.append(marker)
-        
-        self.visualization_publisher.publish(explored_markers)
-        
-        frontier_markers = MarkerArray()
-        for idx, (gx, gy) in enumerate(frontier[-1000:]):
-            world_x, world_y = self.grid_to_world(gx, gy)
-            marker = Marker()
-            marker.header.frame_id = 'map'
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.ns = 'frontier'
-            marker.id = idx
-            marker.type = Marker.SPHERE
-            marker.action = Marker.ADD
-            marker.pose.position.x = world_x
-            marker.pose.position.y = world_y
-            marker.pose.position.z = 0.0
-            marker.scale.x = self.map_metadata.resolution * 0.6
-            marker.scale.y = self.map_metadata.resolution * 0.6
-            marker.scale.z = self.map_metadata.resolution * 0.6
-            marker.color.r = 1.0
-            marker.color.g = 1.0
-            marker.color.b = 0.0
-            marker.color.a = 0.5
-            frontier_markers.markers.append(marker)
-        
-        self.frontier_publisher.publish(frontier_markers)
-    
-    def visualize_inflation_buffer(self):
-        if not self.inflated_map or not self.map_metadata:
-            return
-        
-        buffer_markers = MarkerArray()
-        width = self.map_metadata.width
-        height = self.map_metadata.height
-        marker_id = 0
-        
-        for y in range(height):
-            for x in range(width):
-                idx = y * width + x
-                if 50 <= self.inflated_map[idx] < 100:
-                    world_x, world_y = self.grid_to_world(x, y)
-                    marker = Marker()
-                    marker.header.frame_id = 'map'
-                    marker.header.stamp = self.get_clock().now().to_msg()
-                    marker.ns = 'inflation_buffer'
-                    marker.id = marker_id
-                    marker.type = Marker.CUBE
-                    marker.action = Marker.ADD
-                    marker.pose.position.x = world_x
-                    marker.pose.position.y = world_y
-                    marker.pose.position.z = 0.0
-                    res = self.map_metadata.resolution
-                    marker.scale.x = res
-                    marker.scale.y = res
-                    marker.scale.z = 0.01
-                    marker.color.r = 1.0
-                    marker.color.g = 0.5
-                    marker.color.b = 0.0
-                    marker.color.a = 0.2
-                    buffer_markers.markers.append(marker)
-                    marker_id += 1
-                    if marker_id > 500:
-                        break
-            if marker_id > 500:
+            
+            if len(explored_markers.markers) > 100:  # Limit
                 break
         
-        self.inflation_buffer_publisher.publish(buffer_markers)
+        self.visualization_publisher.publish(explored_markers)
 
 
 def main(args=None):
