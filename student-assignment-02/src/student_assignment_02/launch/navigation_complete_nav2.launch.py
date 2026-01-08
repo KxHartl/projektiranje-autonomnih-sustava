@@ -4,6 +4,7 @@ Navigation Launch File - Kompletna Nav2 + A* + Adapter
 Klassic DWB Controller + Navigation
 
 KRITIČNO FIX: Dodan Lifecycle Manager koji aktivira controller_server!
+Ispravljen executable: nav2_lifecycle_manager (umjesto lifecycle_manager_standalone)
 
 PROBLEM: Bez Lifecycle Managera, controller_server ostaje u WAITING stanju.
 RJEŠENJE: nav2_lifecycle_manager automatski aktivira sve servere.
@@ -25,9 +26,10 @@ def generate_launch_description():
     # LIFECYCLE MANAGER - AKTIVIRA CONTROLLER_SERVER I COSTMAP!
     # =====================================================================
     # OVO JE KLJUČNO! Bez ovoga, controller_server čeka aktivaciju ZAUVIJEK!
+    # ISPRAVLJEN EXECUTABLE: nav2_lifecycle_manager (ne lifecycle_manager_standalone)
     lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
-        executable='lifecycle_manager_standalone',
+        executable='nav2_lifecycle_manager',  # ISPRAVAK: umjesto lifecycle_manager_standalone
         name='lifecycle_manager_navigation',
         output='screen',
         parameters=[
