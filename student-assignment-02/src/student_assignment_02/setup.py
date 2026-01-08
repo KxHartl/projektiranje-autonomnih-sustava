@@ -9,7 +9,7 @@ from glob import glob
 
 package_name = 'student_assignment_02'
 
-# Prona đi sve packages u current direktoriju
+# Pronađi sve packages u current direktoriju
 packages = find_packages(where='.', include=['student_assignment_02*'])
 
 # Ako nema packages, error
@@ -19,7 +19,7 @@ if not packages:
         f"Make sure {package_name}/__init__.py exists"
     )
 
-# Prona đi sve data files
+# Pronađi sve data files
 data_files = []
 
 # Resource file
@@ -78,6 +78,7 @@ setup(
             'map_republisher = student_assignment_02.map_republisher:main',
             'path_planning_node = student_assignment_02.path_planning_node:main',
             'goal_navigation_node = student_assignment_02.goal_navigation_node:main',
+            'path_follower = student_assignment_02.path_follower_node:main',
         ],
     },
 )
