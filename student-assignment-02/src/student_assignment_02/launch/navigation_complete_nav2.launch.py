@@ -37,7 +37,7 @@ def generate_launch_description():
     # Objavljuje je na /planned_path
     astar_planner = Node(
         package='student_assignment_02',
-        executable='astar_path_planner_node',
+        executable='a_star_path_planner',
         name='a_star_path_planner',
         output='screen',
         parameters=[
@@ -56,7 +56,7 @@ def generate_launch_description():
     # Bez potrebe za controller serverom!
     nav2_adapter = Node(
         package='student_assignment_02',
-        executable='nav2_adapter_node',
+        executable='nav2_adapter',
         name='nav2_adapter',
         output='screen',
         parameters=[
