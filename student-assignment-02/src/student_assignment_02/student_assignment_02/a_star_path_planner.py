@@ -5,12 +5,12 @@ Koristi A* algoritam za planiranje putanje na 2D mapi
 Vizualizira pretraživanje prostora u RViz-u
 Podržava dinamiki goal pose iz RViza (2D Goal Pose)
 Koristi base_link za početnu točku (pozicija robota) - SVAKI PUT!
-Dodao: Inflation buffer od 0.2m oko zidova za sigurnu putanju
 
-FIX: Ispravljeni transform lookup i koordinatni sustavi
-- Transform lookup je točan: lookup_transform('map', 'base_link')
-- Sve pozicije u grid-u koriste map origin iz metadata
-- Putanja je UVIJEK u map frameu (što je ispravno)
+FIX: 
+- Start je UVIJEK robot pozicija (base_link TF lookup)
+- Nema transformacije putanje
+- Sve konverzije grid<->world su ispravne
+- Map origin se koristi ispravno
 """
 
 import rclpy
@@ -29,7 +29,7 @@ import traceback
 
 
 class AStarPathPlanner(Node):
-    """ROS2 čvor za A* planiranje putanje s inflation bufferom"""
+    """ROS2 čvor za A* planiranje putanje"""
     
     def __init__(self):
         super().__init__('a_star_path_planner')
@@ -59,7 +59,7 @@ class AStarPathPlanner(Node):
             PoseStamped,
             '/goal_pose',
             self.goal_pose_callback,
-            10  # Regular QoS za goal pose
+            10
         )
         
         # Publisher za putanju
@@ -98,10 +98,6 @@ class AStarPathPlanner(Node):
         # Parametri planiranja
         self.declare_parameter('inflation_radius', 1)
         self.declare_parameter('allow_diagonal', True)
-        self.declare_parameter('goal_x', 5.0)
-        self.declare_parameter('goal_y', 5.0)
-        self.declare_parameter('start_x', 0.0)
-        self.declare_parameter('start_y', 0.0)
         self.declare_parameter('max_iterations', 50000)
         self.declare_parameter('search_radius', -1)
         self.declare_parameter('inflation_distance_m', 0.5)
@@ -115,10 +111,8 @@ class AStarPathPlanner(Node):
         self.inflation_cost_threshold = self.get_parameter('inflation_cost_threshold').value
         
         # Trenutni goal
-        self.current_goal_x = self.get_parameter('goal_x').value
-        self.current_goal_y = self.get_parameter('goal_y').value
-        self.current_start_x = self.get_parameter('start_x').value
-        self.current_start_y = self.get_parameter('start_y').value
+        self.current_goal_x = 0.0
+        self.current_goal_y = 0.0
         
         # Mapa s inflacijom
         self.inflated_map = None
@@ -128,78 +122,50 @@ class AStarPathPlanner(Node):
         self.get_logger().info(f'Max iterations: {self.max_iterations}')
         self.get_logger().info(f'Inflation distance: {self.inflation_distance_m}m')
         self.get_logger().info('[DEBUG] Sluša na /goal_pose za dinamicki goal')
-        self.get_logger().info('[DEBUG] Koristi base_link -> map TF transformaciju')
+        self.get_logger().info('[DEBUG] Start je UVIJEK robot pozicija iz base_link TF')
         self.get_logger().info('[DEBUG] FRAME: Sve putanje su u MAP frameu')
         self.get_logger().info('='*80)
     
     def get_robot_position(self) -> Tuple[float, float]:
-        """
-        Dohvati base_link poziciju iz TF tree-a
-        KRITIČNO: lookup_transform('map', 'base_link') vraća transformaciju
-        koja govori gdje se base_link nalazi u map frameu
-        """
+        """Dohvati base_link poziciju iz TF tree-a"""
         try:
-            self.get_logger().debug('[TF] Počinjem lookup_transform("map", "base_link")...')
-            
-            # Ovaj lookup je TOČAN:
-            # lookup_transform(target_frame, source_frame) → gdje je source u target
-            # Dakle: gdje je base_link u map frameu?
             transform = self.tf_buffer.lookup_transform(
-                'map',           # Target frame (referentni sustav)
-                'base_link',     # Source frame (što tražimo)
+                'map',
+                'base_link',
                 rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=2.0)
+                timeout=rclpy.duration.Duration(seconds=1.0)
             )
-            
             robot_x = transform.transform.translation.x
             robot_y = transform.transform.translation.y
             
-            self.get_logger().info(
+            self.get_logger().debug(
                 f'[TF_OK] base_link u MAP frameu: ({robot_x:.3f}, {robot_y:.3f})'
             )
             return (robot_x, robot_y)
             
         except Exception as e:
             self.get_logger().error(
-                f'[TF_FAIL] lookup_transform("map", "base_link") FAIL!'
+                f'[TF_FAIL] lookup_transform("map", "base_link") FAIL: {type(e).__name__}'
             )
-            self.get_logger().error(
-                f'[TF_FAIL] Razlog: {type(e).__name__}: {str(e)}'
-            )
-            self.get_logger().error(
-                f'[FALLBACK] Koristim fallback: '
-                f'start_x={self.current_start_x}, start_y={self.current_start_y}'
-            )
-            return (self.current_start_x, self.current_start_y)
+            return (0.0, 0.0)
     
     def goal_pose_callback(self, msg: PoseStamped):
-        """
-        Primanje goal pose iz RViza (2D Goal Pose tool)
-        RViz posalje goal UVIJEK u map frameu!
-        """
+        """Primanje goal pose iz RViza"""
         self.current_goal_x = msg.pose.position.x
         self.current_goal_y = msg.pose.position.y
         self.goal_received = True
         
         self.get_logger().info(
-            f'[GOAL] Nova goal pose (frame: {msg.header.frame_id}): '
-            f'({self.current_goal_x:.2f}, {self.current_goal_y:.2f})'
+            f'[GOAL] Nova goal pose: ({self.current_goal_x:.2f}, {self.current_goal_y:.2f})'
         )
         
         if self.map_data is not None:
             self.plan_and_publish()
     
     def map_callback(self, msg: OccupancyGrid):
-        """
-        Primanje mape i planiranje putanje
-        Mapa je UVIJEK u map frameu!
-        """
+        """Primanje mape i planiranje putanje"""
         self.map_data = msg.data
         self.map_metadata = msg.info
-        
-        self.get_logger().debug(
-            f'Map frame_id: {msg.header.frame_id}'
-        )
         
         self.inflated_map = self.create_inflated_map()
         
@@ -209,10 +175,6 @@ class AStarPathPlanner(Node):
         )
         self.get_logger().info(
             f'Mapa origin: ({msg.info.origin.position.x:.2f}, {msg.info.origin.position.y:.2f})'
-        )
-        self.get_logger().info(
-            f'Inflation buffer: {self.inflation_distance_m}m '
-            f'({self._get_inflation_cells()} stanica)'
         )
         
         if self.goal_received:
@@ -242,9 +204,6 @@ class AStarPathPlanner(Node):
                     if min_dist < inflation_cells:
                         inflated[idx] = 60 + int((inflation_cells - min_dist) * 10)
         
-        self.get_logger().info(
-            f'Inflirana mapa kreirana - buffer: {inflation_cells} stanica'
-        )
         return inflated
     
     def _min_distance_to_obstacle(self, x: int, y: int, max_dist: int) -> float:
@@ -277,14 +236,11 @@ class AStarPathPlanner(Node):
         return max_dist
     
     def plan_and_publish(self):
-        """
-        Planiraj putanju i objavi je
-        SVE POZICIJE SU U MAP FRAMEU!
-        """
+        """Planiraj putanju i objavi je"""
         self.get_logger().info('\n' + '='*80)
         self.get_logger().info('[PLAN] Pokrenut plan_and_publish()')
         
-        # Dohvati robot poziciju
+        # KRITIČNO: Dohvati robot poziciju SVAKI PUT
         robot_x, robot_y = self.get_robot_position()
         
         goal_x = self.current_goal_x
@@ -314,10 +270,7 @@ class AStarPathPlanner(Node):
         self.get_logger().info('='*80 + '\n')
     
     def world_to_grid(self, x: float, y: float) -> Tuple[int, int]:
-        """
-        Konvertuj world koordinate (u MAP frameu) u grid koordinate
-        Važno: koristi map metadata origin!
-        """
+        """Konvertuj world koordinate (u MAP frameu) u grid koordinate"""
         if not self.map_metadata:
             return (0, 0)
         
@@ -333,16 +286,10 @@ class AStarPathPlanner(Node):
         grid_x = max(0, min(grid_x, self.map_metadata.width - 1))
         grid_y = max(0, min(grid_y, self.map_metadata.height - 1))
         
-        self.get_logger().debug(
-            f'[GRID] World ({x:.2f}, {y:.2f}) -> Grid {(grid_x, grid_y)}'
-        )
-        
         return (grid_x, grid_y)
     
     def grid_to_world(self, grid_x: int, grid_y: int) -> Tuple[float, float]:
-        """
-        Konvertuj grid koordinate u world koordinate (u MAP frameu)
-        """
+        """Konvertuj grid koordinate u world koordinate (u MAP frameu)"""
         if not self.map_metadata:
             return (0.0, 0.0)
         
@@ -379,6 +326,7 @@ class AStarPathPlanner(Node):
         x, y = cell
         neighbors = []
         
+        # 4-connected neighbors
         four_neighbors = [
             (x + 1, y), (x - 1, y),
             (x, y + 1), (x, y - 1)
@@ -448,7 +396,6 @@ class AStarPathPlanner(Node):
                 
                 self.get_logger().info(
                     f'A* završio u {iteration} iteracija, '
-                    f'istraživao {len(explored)} stanica, '
                     f'dužina putanje: {len(path)}'
                 )
                 return path, explored, frontier_cells
@@ -472,17 +419,15 @@ class AStarPathPlanner(Node):
         return None, explored, frontier_cells
     
     def publish_path(self, path: List[Tuple[int, int]]):
-        """
-        Objavi putanju u MAP frameu
-        """
+        """Objavi putanju u MAP frameu"""
         ros_path = Path()
-        ros_path.header.frame_id = 'map'  # VAŽNO: uvijek map!
+        ros_path.header.frame_id = 'map'
         ros_path.header.stamp = self.get_clock().now().to_msg()
         
         for grid_pos in path:
             world_x, world_y = self.grid_to_world(grid_pos[0], grid_pos[1])
             pose = PoseStamped()
-            pose.header.frame_id = 'map'  # VAŽNO: uvijek map!
+            pose.header.frame_id = 'map'
             pose.header.stamp = self.get_clock().now().to_msg()
             pose.pose.position.x = world_x
             pose.pose.position.y = world_y
