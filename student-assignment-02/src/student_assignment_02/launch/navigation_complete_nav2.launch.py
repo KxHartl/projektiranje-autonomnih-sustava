@@ -40,28 +40,6 @@ def generate_launch_description():
         default_value='0.5',
         description='Inflation buffer distanca (metri)'
     )
-    
-    # =====================================================================
-    # 1. A* PATH PLANNER NODE
-    # =====================================================================
-    astar_node = Node(
-        package='student_assignment_02',
-        executable='a_star_path_planner',
-        name='a_star_path_planner',
-        output='screen',
-        parameters=[
-            {
-                'use_sim_time': LaunchConfiguration('use_sim_time'),
-                'allow_diagonal': True,
-                'inflation_radius': 1,
-                'inflation_distance_m': LaunchConfiguration('inflation_distance_m'),
-                'inflation_cost_threshold': 60,
-                'max_iterations': 50000,
-                'search_radius': -1,
-            }
-        ],
-    )
-    
     # =====================================================================
     # 2. NAV2 LIFECYCLE MANAGER
     # =====================================================================
@@ -143,20 +121,6 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 8. RViz2 - VIZUALIZACIJA
-    # =====================================================================
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', rviz_config_file],
-        parameters=[
-            {'use_sim_time': LaunchConfiguration('use_sim_time')}
-        ]
-    )
-    
-    # =====================================================================
     # LAUNCH DESCRIPTION
     # =====================================================================
     ld = LaunchDescription([
@@ -175,11 +139,7 @@ def generate_launch_description():
         bt_navigator,
         
         # 3. A* planer i adapter
-        astar_node,
         nav2_adapter_node,
-        
-        # 4. RViz za vizualizaciju
-        rviz_node,
     ])
     
     return ld
