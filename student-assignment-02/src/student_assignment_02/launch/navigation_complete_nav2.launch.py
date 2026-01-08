@@ -52,11 +52,6 @@ def generate_launch_description():
         parameters=[
             {
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
-                # Goal se postavlj iz RViza (2D Goal Pose)
-                'goal_x': 5.0,
-                'goal_y': 5.0,
-                'start_x': 0.0,
-                'start_y': 0.0,
                 'allow_diagonal': True,
                 'inflation_radius': 1,
                 'inflation_distance_m': LaunchConfiguration('inflation_distance_m'),
@@ -134,7 +129,7 @@ def generate_launch_description():
     # =====================================================================
     # 7. NAV2 ADAPTER NODE
     # =====================================================================
-    # Ovaj čvor hvata putanju od A* planera i šalje je Nav2
+    # Ovaj čvor hvata /planned_path od A* planera i šalje je Nav2
     nav2_adapter_node = Node(
         package='student_assignment_02',
         executable='nav2_adapter',
@@ -145,9 +140,6 @@ def generate_launch_description():
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
             }
         ],
-        remappings=[
-            ('/astar_path', '/planned_path'),
-        ]
     )
     
     # =====================================================================
