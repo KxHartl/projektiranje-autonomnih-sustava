@@ -3,8 +3,8 @@
 A* Path Planner Node
 Koristi A* algoritam za planiranje putanje na 2D mapi
 Vizualizira pretraživanje prostora u RViz-u
-Podrživavas dinamiki goal pose iz RViza (2D Goal Pose)
-Koristi base_link za početnu točku (pozicija robota)
+Podržava dinamiki goal pose iz RViza (2D Goal Pose)
+Koristi base_link za početnu točku (pozicija robota) - SVAKI PUT!
 Dodao: Inflation buffer od 0.2m oko zidova za sigurnu putanju
 """
 
@@ -122,20 +122,25 @@ class AStarPathPlanner(Node):
         self.get_logger().info(f'Max iterations: {self.max_iterations}')
         self.get_logger().info(f'Inflation distance: {self.inflation_distance_m}m (0.2m = 20cm)')
         self.get_logger().info('Slusa na /goal_pose za dinamicki goal (RViz 2D Goal Pose)')
-        self.get_logger().info('Koristi base_link za početnu točku (poziciju robota)')
+        self.get_logger().info('Koristi base_link za početnu točku (poziciju robota) - SVAKI PUT!')
     
     def get_robot_position(self) -> Tuple[float, float]:
         """
         Proba pronaći base_link poziciju iz TF tree-a
-        Ako ne može, koristi parametar start_x, start_y
+        KRITIČNO: Ova funkcija se poziva SVAKI PUT da bi se dobila SVEŽA pozicija!
         """
         try:
-            # Proba dobiti transformaciju od map-a do base_link-a
-            transform = self.tf_buffer.lookup_transform('map', 'base_link', rclpy.time.Time())
+            # SVAKI PUT traži transformaciju - nemoj je cachirati!
+            transform = self.tf_buffer.lookup_transform(
+                'map', 
+                'base_link', 
+                rclpy.time.Time(),  # SADA
+                timeout=rclpy.duration.Duration(seconds=1.0)
+            )
             robot_x = transform.transform.translation.x
             robot_y = transform.transform.translation.y
             
-            self.get_logger().debug(f'base_link pozicija: ({robot_x:.2f}, {robot_y:.2f})')
+            self.get_logger().info(f'[TF] base_link pozicija: ({robot_x:.2f}, {robot_y:.2f})')
             return (robot_x, robot_y)
             
         except Exception as e:
@@ -155,7 +160,7 @@ class AStarPathPlanner(Node):
         self.goal_received = True
         
         self.get_logger().info(
-            f'Nova goal pose primljena iz RViza: '
+            f'[GOAL] Nova goal pose primljena iz RViza: '
             f'({self.current_goal_x:.2f}, {self.current_goal_y:.2f})'
         )
         
@@ -170,7 +175,7 @@ class AStarPathPlanner(Node):
         self.map_data = msg.data
         self.map_metadata = msg.info
         
-        # NOVO: Kreiraj infliranu mapu
+        # NOVO: Kreiraj inflirani mapu
         self.inflated_map = self.create_inflated_map()
         
         self.get_logger().info(
@@ -274,8 +279,9 @@ class AStarPathPlanner(Node):
     def plan_and_publish(self):
         """
         Planiraj putanju i objavi je
+        KRITIčNO: get_robot_position() se poziva SVAKI PUT!
         """
-        # Proba dobiti poziciju robota iz base_link-a
+        # SVAKI PUT dobij svježa pozicija robota iz TF-a!
         start_x, start_y = self.get_robot_position()
         
         # Goal se koristi iz RViza ili parametara
@@ -287,7 +293,7 @@ class AStarPathPlanner(Node):
         goal_grid = self.world_to_grid(goal_x, goal_y)
         
         self.get_logger().info(
-            f'Planiranje putanje od {start_grid} (world: {start_x:.2f}, {start_y:.2f}) '
+            f'[PLAN] Planiranje putanje od {start_grid} (world: {start_x:.2f}, {start_y:.2f}) '
             f'do {goal_grid} (world: {goal_x:.2f}, {goal_y:.2f})'
         )
         
@@ -344,7 +350,7 @@ class AStarPathPlanner(Node):
         """
         Provjeri je li stanica valjana (slobodna)
         
-        POBOLJŠANJE: Sada koristi inflirane mape za čuvanje razmaka od zidova
+        POBOLjŠANJE: Sada koristi inflirane mape za čuvanje razmaka od zidova
         """
         if not self.map_metadata:
             return False
@@ -418,7 +424,7 @@ class AStarPathPlanner(Node):
         """
         A* algoritam za planiranje putanje
         
-        POBOLJŠANJA:
+        POBOLjŠANJA:
         - Koristi inflirane mape za sigurnu distancu od prepreka
         - max_iterations povećan na 50000
         
