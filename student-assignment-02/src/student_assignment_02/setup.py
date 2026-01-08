@@ -79,6 +79,7 @@ setup(
             'path_planning_node = student_assignment_02.path_planning_node:main',
             'goal_navigation_node = student_assignment_02.goal_navigation_node:main',
             'path_follower = student_assignment_02.path_follower_node:main',
+            'nav2_adapter = student_assignment_02.nav2_adapter:main',
         ],
     },
 )
