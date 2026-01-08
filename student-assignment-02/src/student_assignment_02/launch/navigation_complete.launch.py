@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
 Navigation Complete Launch File
-Integrira A* path planning s path following (Pure Pursuit ili custom kontroler)
+Integrira A* path planning s path following (Pure Pursuit)
 Za korištenje: ros2 launch student_assignment_02 navigation_complete.launch.py
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration
 
@@ -119,22 +118,26 @@ def generate_launch_description():
     # =====================================================================
     # 2. PATH FOLLOWER NODE (Pure Pursuit)
     # =====================================================================
-    # Opciono: Ako trebate custom path follower, zamijenjite s vašim nodom
-    # path_follower_node = Node(
-    #     package='student_assignment_02',
-    #     executable='path_follower',  # Trebate razviti ovaj node
-    #     name='path_follower',
-    #     output='screen',
-    #     parameters=[
-    #         {
-    #             'lookahead_distance': LaunchConfiguration('lookahead_distance'),
-    #             'max_linear_velocity': LaunchConfiguration('max_linear_velocity'),
-    #             'max_angular_velocity': LaunchConfiguration('max_angular_velocity'),
-    #             'path_topic': '/planned_path',
-    #             'cmd_vel_topic': '/cmd_vel',
-    #         }
-    #     ]
-    # )
+    path_follower_node = Node(
+        package='student_assignment_02',
+        executable='path_follower',
+        name='path_follower',
+        output='screen',
+        parameters=[
+            {
+                'lookahead_distance': LaunchConfiguration('lookahead_distance'),
+                'max_linear_velocity': LaunchConfiguration('max_linear_velocity'),
+                'max_angular_velocity': LaunchConfiguration('max_angular_velocity'),
+                'path_topic': '/planned_path',
+                'cmd_vel_topic': '/cmd_vel',
+                'goal_tolerance': 0.1,
+            }
+        ],
+        remappings=[
+            ('planned_path', '/planned_path'),
+            ('cmd_vel', '/cmd_vel'),
+        ]
+    )
     
     # =====================================================================
     # 3. RViz2 - VIZUALIZACIJA
@@ -154,7 +157,6 @@ def generate_launch_description():
         name='rviz2',
         output='screen',
         arguments=rviz_args,
-        condition=LaunchConfiguration('rviz_enabled'),
     )
     
     # =====================================================================
@@ -176,7 +178,7 @@ def generate_launch_description():
         
         # Čvorovi
         astar_node,
-        # path_follower_node,  # Odkomentirajte kada napravite own path follower
+        path_follower_node,  # Path follower aktiviran!
         rviz_node,
     ])
     
