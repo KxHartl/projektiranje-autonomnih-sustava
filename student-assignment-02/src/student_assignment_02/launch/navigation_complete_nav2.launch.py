@@ -3,7 +3,7 @@
 Navigation Launch File - MINIMALIST
 SAMO:
 - A* Path Planner
-- Nav2 Controller Server (DWB)
+- Nav2 Controller Server (DWB) - KRITIČNO!
 - Nav2 Velocity Smoother
 - Nav2 Adapter
 
@@ -72,12 +72,16 @@ def generate_launch_description():
     # =====================================================================
     # 2. NAV2 CONTROLLER SERVER (DWB - lokalni planer)
     # =====================================================================
+    # VAŽNO: Ovo je ono što stvara /follow_path akciju!
     controller_server = Node(
         package='nav2_controller',
         executable='controller_server',
         name='controller_server',
         output='screen',
         parameters=[nav2_params_file],
+        remappings=[
+            ('cmd_vel', '/cmd_vel'),
+        ]
     )
     
     # =====================================================================
@@ -89,6 +93,10 @@ def generate_launch_description():
         name='velocity_smoother',
         output='screen',
         parameters=[nav2_params_file],
+        remappings=[
+            ('cmd_vel', '/cmd_vel'),
+            ('cmd_vel_smoothed', '/cmd_vel_smoothed'),
+        ]
     )
     
     # =====================================================================
@@ -118,6 +126,7 @@ def generate_launch_description():
         astar_node,
         
         # 2. Nav2 komponente (samo potrebne)
+        # VAŽNO: controller_server MORA biti pokrenut prije adapter-a!
         controller_server,
         velocity_smoother,
         
