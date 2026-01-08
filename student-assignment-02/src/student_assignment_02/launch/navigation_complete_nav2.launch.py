@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """
-Navigation Complete with Nav2 Launch File
-Integrira A* global path planning s Nav2 lokalnim planerom
-Nav2 automatski sljedi putanju generirane A* planaterom
-Za korištenje: ros2 launch student_assignment_02 navigation_complete_nav2.launch.py
+Navigation Launch File - SAMO Nav2 Navigacija
+Ova datoteka pokreće SAMO:
+- A* Path Planner
+- Nav2 komponente (kontroler, planer, BT, smoother)
+- Nav2 Adapter
 
-NAPOMENA: 2D Goal Pose iz RViza će automatski pokrenuti A* planiranje
+NE pokreće: Stage, AMCL, RViz (oni se pokreću odvojeno)
+
+Redoslijed pokretanja:
+1. Terminal 1: Stage simulator - ros2 launch student_assignment_02 stage_launch.py
+2. Terminal 2: AMCL - ros2 launch student_assignment_02 localization_complete_launch.py
+3. Terminal 3: RViz - ros2 run rviz2 rviz2 -d <config>
+4. Terminal 4: OVA DATOTEKA - Navigacija
 """
 
 import os
@@ -17,14 +24,13 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
-    """Launch file za A* planiranje putanje s Nav2 lokalnim planerom"""
+    """Launch file za A* + Nav2 navigaciju (bez Stage/AMCL/RViz)"""
     
     # Paket direktorij
     student_pkg_dir = get_package_share_directory('student_assignment_02')
     
     # Konfiguracija datoteke
     nav2_params_file = os.path.join(student_pkg_dir, 'config', 'nav2_params.yaml')
-    rviz_config_file = os.path.join(student_pkg_dir, 'config', 'rviz_navigation.rviz')
     
     # =====================================================================
     # LAUNCH ARGUMENTI
@@ -40,6 +46,28 @@ def generate_launch_description():
         default_value='0.5',
         description='Inflation buffer distanca (metri)'
     )
+    
+    # =====================================================================
+    # 1. A* PATH PLANNER NODE
+    # =====================================================================
+    astar_node = Node(
+        package='student_assignment_02',
+        executable='a_star_path_planner',
+        name='a_star_path_planner',
+        output='screen',
+        parameters=[
+            {
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
+                'allow_diagonal': True,
+                'inflation_radius': 1,
+                'inflation_distance_m': LaunchConfiguration('inflation_distance_m'),
+                'inflation_cost_threshold': 60,
+                'max_iterations': 50000,
+                'search_radius': -1,
+            }
+        ],
+    )
+    
     # =====================================================================
     # 2. NAV2 LIFECYCLE MANAGER
     # =====================================================================
@@ -61,7 +89,7 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 3. NAV2 PLANNER SERVER (globalni planer - koristi Nav2 default)
+    # 3. NAV2 PLANNER SERVER (globalni planer)
     # =====================================================================
     planner_server = Node(
         package='nav2_planner',
@@ -72,7 +100,7 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 4. NAV2 CONTROLLER SERVER (lokalni planer - GLAVNI KONTROLER)
+    # 4. NAV2 CONTROLLER SERVER (lokalni planer - GLAVNI)
     # =====================================================================
     controller_server = Node(
         package='nav2_controller',
@@ -106,17 +134,15 @@ def generate_launch_description():
     
     # =====================================================================
     # 7. NAV2 ADAPTER NODE
+    # Hvata /planned_path od A* planera i šalje je Nav2 FollowPath akciji
     # =====================================================================
-    # Ovaj čvor hvata /planned_path od A* planera i šalje je Nav2
     nav2_adapter_node = Node(
         package='student_assignment_02',
         executable='nav2_adapter',
         name='nav2_adapter',
         output='screen',
         parameters=[
-            {
-                'use_sim_time': LaunchConfiguration('use_sim_time'),
-            }
+            {'use_sim_time': LaunchConfiguration('use_sim_time')}
         ],
     )
     
@@ -128,17 +154,20 @@ def generate_launch_description():
         use_sim_time_arg,
         inflation_distance_arg,
         
-        # Čvorovi - redoslijed je bitan!
-        # 1. Prvo lifecycle manager
+        # Redoslijed je BITAN!
+        # 1. Prvo A* planer
+        astar_node,
+        
+        # 2. Zatim lifecycle manager
         lifecycle_manager,
         
-        # 2. Nav2 komponente
+        # 3. Nav2 komponente
         planner_server,
         controller_server,
         velocity_smoother,
         bt_navigator,
         
-        # 3. A* planer i adapter
+        # 4. Adapter koji povezuje A* s Nav2
         nav2_adapter_node,
     ])
     
