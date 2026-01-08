@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Nav2 Adapter Node - Sljedi putanju bez kruga
+Nav2 Adapter Node - Sljedi putanju i zaustavlja se na cilju
 
 FIX:
 1. Sluša /planned_path (od A* planera)
 2. SVE POZICIJE U MAP FRAMEU
 3. Direktno sljedi putanju
 4. Šalje /cmd_vel komande robotu
-5. NEMA KRUGA
+5. ZAUSTAVLJA SE NA CILJU
+6. Praći svaki korak
 """
 
 import rclpy
@@ -19,7 +20,7 @@ import math
 
 
 class Nav2Adapter(Node):
-    """Adapter koji sljedi putanju"""
+    """Adapter koji sljedi putanju i zaustavlja se na cilju"""
     
     def __init__(self):
         super().__init__('nav2_adapter')
@@ -30,7 +31,7 @@ class Nav2Adapter(Node):
             '\n- Sluša: /planned_path (od A* planera)' +
             '\n- Šalje: /cmd_vel (robotu)' +
             '\n- SVE U MAP FRAMEU' +
-            '\n- NEMA KRUGA' +
+            '\n- PRATI PUTANJU I ZAUSTAVLJA SE' +
             '\n' + '='*80 + '\n'
         )
         
@@ -60,25 +61,29 @@ class Nav2Adapter(Node):
         self.current_path = None
         self.path_index = 0
         self.is_following = False
-        self.last_log_index = -5  # Za logiranje
+        self.goal_reached = False
+        self.last_log_index = -5
         
         # Parametri
         self.declare_parameter('linear_speed', 0.3)
         self.declare_parameter('angular_speed', 1.0)
         self.declare_parameter('distance_tolerance', 0.15)
+        self.declare_parameter('goal_tolerance', 0.2)
         
         self.linear_speed = self.get_parameter('linear_speed').value
         self.angular_speed = self.get_parameter('angular_speed').value
         self.distance_tolerance = self.get_parameter('distance_tolerance').value
+        self.goal_tolerance = self.get_parameter('goal_tolerance').value
         
         self.get_logger().info(
             f'[INIT] Parametri: linear={self.linear_speed}m/s, '
-            f'angular={self.angular_speed}rad/s, tolerance={self.distance_tolerance}m'
+            f'angular={self.angular_speed}rad/s, distance_tol={self.distance_tolerance}m, '
+            f'goal_tol={self.goal_tolerance}m'
         )
         
         # Timer za sljedićenje
-        self.timer = self.create_timer(0.1, self.follow_timer)
-        self.get_logger().info('[INIT] Timer 0.1s ✓\n')
+        self.timer = self.create_timer(0.05, self.follow_timer)  # 20 Hz
+        self.get_logger().info('[INIT] Timer 0.05s (20Hz) ✓\n')
     
     def path_callback(self, msg: Path):
         """Primanje putanje od A* planera"""
@@ -90,6 +95,7 @@ class Nav2Adapter(Node):
         self.current_path = msg
         self.path_index = 0
         self.is_following = True
+        self.goal_reached = False
         self.last_log_index = -5
         
         # Izračuna dužinu
@@ -116,9 +122,11 @@ class Nav2Adapter(Node):
             self.cmd_pub.publish(cmd)
             return
         
-        # Ako je kraj putanje, zaustavi i završi
+        # Ako je kraj putanje, zaustavi
         if self.path_index >= len(self.current_path.poses):
-            self.get_logger().info('[DONE] Putanja završena! Robot zaustavljen.\n')
+            if not self.goal_reached:
+                self.get_logger().info('[DONE] Putanja završena! Robot zaustavljen.\n')
+                self.goal_reached = True
             self.is_following = False
             cmd = Twist()
             self.cmd_pub.publish(cmd)
@@ -135,7 +143,7 @@ class Nav2Adapter(Node):
             robot_x = tf.transform.translation.x
             robot_y = tf.transform.translation.y
         except Exception as e:
-            self.get_logger().error(f'[TF] Lookup failed: {type(e).__name__}')
+            # self.get_logger().error(f'[TF] Lookup failed: {type(e).__name__}')
             cmd = Twist()
             self.cmd_pub.publish(cmd)
             return
@@ -154,6 +162,8 @@ class Nav2Adapter(Node):
         if self.path_index >= self.last_log_index + 5:
             self.get_logger().info(
                 f'[FOLLOW] Točka {self.path_index}/{len(self.current_path.poses)}: '
+                f'robot=({robot_x:.2f},{robot_y:.2f}), '
+                f'target=({target_x:.2f},{target_y:.2f}), '
                 f'dist={distance:.3f}m'
             )
             self.last_log_index = self.path_index
@@ -167,21 +177,24 @@ class Nav2Adapter(Node):
         cmd = Twist()
         
         # Linearna brzina: proporcionalno udaljenosti
-        # Минимум 0.05 m/s da se robot kreće
-        cmd.linear.x = max(0.05, min(self.linear_speed, distance * 0.3))
+        # Usporavanje blizu cilja
+        if distance < 0.5:
+            cmd.linear.x = max(0.05, distance * 0.3)
+        else:
+            cmd.linear.x = self.linear_speed
+        
         cmd.linear.y = 0.0
         cmd.linear.z = 0.0
         
-        # Kutna brzina: samo ako trebam rotaciju
-        # atan2 (dy, dx) daje čeljni kut
-        # Razlika od robot orjentacije bi trebala biti oko 0 za slijedjenje putanje
-        # Pojednostavljeno: malo kutne brzine ako trebam korekciju
-        # Zapravo: robot će slijediti putanju ako ide prema idućoj točki
-        # Kutna brzina = 0 jer se robot pomjera prema (dx, dy)
-        # To je dovoljno da prati putanju
+        # Kutna brzina: rotacija prema cilju
+        # atan2 (dy, dx) je kut prema cilju
+        angle_to_target = math.atan2(dy, dx)
+        
+        # Kutna brzina proporcionalno kut razlici
+        # Ograniči da ne bude prevelika
         cmd.angular.x = 0.0
         cmd.angular.y = 0.0
-        cmd.angular.z = 0.0  # KRITIČNO: bez kutne brzine! Robot prati putanju kroz x,y
+        cmd.angular.z = min(self.angular_speed, abs(angle_to_target) * 0.5) * (1 if angle_to_target > 0 else -1)
         
         # Objavi
         self.cmd_pub.publish(cmd)
