@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-Navigation Launch File - JEDNOSTAVNA VERZIJA
-A* Path Planner + Nav2 Adapter
+Navigation Launch File - MINIMALISTIKA VERZIJA
+BEZ Lifecycle Managera (koji nije dostupan)
 
-Robot kreće:
-1. RViz 2D Goal Pose -> /goal_pose
-2. A* Path Planner -> /planned_path
-3. Nav2 Adapter -> /cmd_vel
-4. Robot se kreće
+RJEŠENJE:
+- A* Path Planner - planira putanju
+- Nav2 Adapter - slijedi putanju bez controller servera
+- Robot se kreće prema cilju
 
-SVE U MAP FRAMEU
-BEZ KRUGA
-BEZ LIFECYCLE MANAGERA
+Evo čini ovakvo:
+1. RViz "2D Goal Pose" → /goal_pose
+2. A* node planira putanju → /planned_path
+3. Nav2 Adapter hvata putanju
+4. Nav2 Adapter usmjerava robota prema cilju
+5. Robot se kreće
+
+BEZ potrebe za Lifecycle Managerom ili Local Costmapom!
 """
 
 import os
@@ -29,9 +33,11 @@ def generate_launch_description():
     # =====================================================================
     # A* PATH PLANNER NODE
     # =====================================================================
+    # Planira putanju od base_link do goal_pose
+    # Objavljuje je na /planned_path
     astar_planner = Node(
         package='student_assignment_02',
-        executable='astar_path_planner',
+        executable='a_star_path_planner',
         name='a_star_path_planner',
         output='screen',
         parameters=[
@@ -45,6 +51,9 @@ def generate_launch_description():
     # =====================================================================
     # NAV2 ADAPTER NODE
     # =====================================================================
+    # Hvata putanju od A* planera
+    # Usmjerava robota prema cilju
+    # Bez potrebe za controller serverom!
     nav2_adapter = Node(
         package='student_assignment_02',
         executable='nav2_adapter',
@@ -52,15 +61,13 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'use_sim_time': use_sim_time},
-            {'linear_speed': 0.3},
-            {'angular_speed': 1.0},
-            {'distance_tolerance': 0.15},
         ]
     )
     
     # =====================================================================
     # LAUNCH DESCRIPTION
     # =====================================================================
+    # Jednostavno: samo dva čvora
     ld = LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
@@ -68,10 +75,11 @@ def generate_launch_description():
             description='Koristi simulacijsko vrijeme'
         ),
         
-        # A* planer - planira putanju
+        # Redoslijed:
+        # 1. A* planer - planira putanju
         astar_planner,
         
-        # Nav2 adapter - sljedi putanju
+        # 2. Adapter - slijedi putanju
         nav2_adapter,
     ])
     

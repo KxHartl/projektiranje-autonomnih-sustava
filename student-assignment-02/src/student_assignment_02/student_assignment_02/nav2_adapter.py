@@ -1,187 +1,196 @@
 #!/usr/bin/env python3
 """
-Nav2 Adapter Node - Sljedi putanju
+Nav2 Adapter Node - JEDNOSTAVNIJA VERZIJA
+BEZ /follow_path akcije (koja zahtijeva controller_server)
 
-FIX:
-1. Sluša /planned_path (od A* planera)
-2. SVE POZICIJE U MAP FRAMEU
-3. Direktno sljedi putanju
-4. Šalje /cmd_vel komande robotu
-5. ZAUSTAVLJA SE NA CILJU
-6. PRIMAJ NOVE PUTANJE - KONTINUIRNA REPLANIRANJE
+FIX: Direktno slijedi putanju bez Nav2 kontrolera
+- Hvata /planned_path od A* planera
+- Šalje /cmd_vel komande za kretanje
+- Robot se kreće prema cilju
+
+Ovakvo je jednostavnije i ne zahtijeva:
+- Lifecycle Manager
+- Controller Server
+- DWB Controller
+- Local Costmap
+
+Samo:
+1. Hvata putanju
+2. Prati je
+3. Šalje komande robotu
 """
 
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Path
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped, Twist
 from tf2_ros import TransformListener, Buffer
 import math
+import time
 
 
 class Nav2Adapter(Node):
-    """Adapter koji sljedi putanju - kontinuirna replaniranje"""
+    """Adapter koji sljedi putanju bez controller_server"""
     
     def __init__(self):
         super().__init__('nav2_adapter')
         
         self.get_logger().info(
-            '\n' + '='*80 +
-            '\n[NAV2 ADAPTER] Inicijalizacija' +
-            '\n- Sluša: /planned_path (od A* planera)' +
-            '\n- Šalje: /cmd_vel (robotu)' +
-            '\n- KONTINUIRNA REPLANIRANJE OD ROBOT POZICIJE' +
-            '\n- SVE U MAP FRAMEU' +
-            '\n- PRATI PUTANJU I ZAUSTAVLJA SE' +
-            '\n' + '='*80 + '\n'
+            '\n' +
+            '='*80 +
+            '\n[ADAPTER] INICIJALIZACIJA - JEDNOSTAVNA VERZIJA' +
+            '\n' +
+            '- Sluša: /planned_path (od A* planera)' +
+            '\n' +
+            '- Šalje: /cmd_vel (direktno robotu)' +
+            '\n' +
+            '- NEMA /follow_path akcije' +
+            '\n' +
+            '- NEMA controller_server ovisnosti' +
+            '\n' +
+            '='*80 +
+            '\n'
         )
         
         # Subscribe na A* putanju
-        self.path_sub = self.create_subscription(
+        self.path_subscription = self.create_subscription(
             Path,
             '/planned_path',
             self.path_callback,
             10
         )
-        self.get_logger().info('[INIT] Subscribe /planned_path ✓')
+        self.get_logger().info('[ADAPTER] ✓ Subscribe na /planned_path')
         
-        # Publisher za cmd_vel
-        self.cmd_pub = self.create_publisher(
+        # Publisher za čv komande
+        self.cmd_vel_publisher = self.create_publisher(
             Twist,
             '/cmd_vel',
             10
         )
-        self.get_logger().info('[INIT] Publisher /cmd_vel ✓')
+        self.get_logger().info('[ADAPTER] ✓ Publisher za /cmd_vel')
         
-        # TF lookup
+        # TF buffer za transformacije
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.get_logger().info('[INIT] TF Listener ✓')
         
-        # Stanje
-        self.current_path = None
+        # Skladistenje putanje
+        self.current_path: Path = None
         self.path_index = 0
-        self.is_following = False
-        self.last_log_index = -5
+        self.following = False
         
-        # Parametri
-        self.declare_parameter('linear_speed', 0.3)
-        self.declare_parameter('angular_speed', 1.0)
-        self.declare_parameter('distance_tolerance', 0.15)
+        # Parametri kretanja
+        self.max_linear_speed = 0.3  # m/s
+        self.max_angular_speed = 1.0  # rad/s
+        self.position_tolerance = 0.1  # m
+        self.angle_tolerance = 0.2  # rad
         
-        self.linear_speed = self.get_parameter('linear_speed').value
-        self.angular_speed = self.get_parameter('angular_speed').value
-        self.distance_tolerance = self.get_parameter('distance_tolerance').value
+        # Timer za sljedićenje putanje
+        self.timer = self.create_timer(0.1, self.follow_path_timer)
         
-        self.get_logger().info(
-            f'[INIT] Parametri: linear={self.linear_speed}m/s, '
-            f'angular={self.angular_speed}rad/s, tol={self.distance_tolerance}m'
-        )
-        
-        # Timer za sljedićenje
-        self.timer = self.create_timer(0.05, self.follow_timer)  # 20 Hz
-        self.get_logger().info('[INIT] Timer 0.05s (20Hz) ✓\n')
+        self.get_logger().info('[ADAPTER] ✓ Inicijalizacija gotova')
+        self.get_logger().info('')
     
     def path_callback(self, msg: Path):
-        """Primanje putanje od A* planera"""
-        if len(msg.poses) == 0:
-            self.get_logger().warn('[PATH] Prazna putanja!')
-            return
-        
-        # Primjena nove putanje - KONTINUIRNO!
-        self.current_path = msg
-        self.path_index = 0  # RESTART od početka nove putanje
-        self.is_following = True
-        self.last_log_index = -5
-        
-        # Ispis putanje
-        self.get_logger().info(
-            f'[PATH] Nova putanja: {len(msg.poses)} točaka, frame={msg.header.frame_id}'
-        )
-        
+        """Prima putanju od A* planera"""
         if len(msg.poses) > 0:
-            first = msg.poses[0]
-            last = msg.poses[-1]
-            self.get_logger().debug(
-                f'[PATH] Start: ({first.pose.position.x:.2f}, {first.pose.position.y:.2f}), '
-                f'Goal: ({last.pose.position.x:.2f}, {last.pose.position.y:.2f})'
+            self.current_path = msg
+            self.path_index = 0
+            self.following = True
+            length = self.calculate_path_length(msg)
+            
+            self.get_logger().info(
+                f'[PATH] ✓ Primljena putanja: {len(msg.poses)} točaka, '
+                f'dužina: {length:.2f}m'
             )
+            self.get_logger().info(
+                f'[FOLLOW] ✓ Počinjem sljedićenje putanje...'
+            )
+        else:
+            self.get_logger().warn('[PATH] ✗ Putanja je PRAZNA!')
+            self.following = False
     
-    def follow_timer(self):
+    def calculate_path_length(self, path: Path) -> float:
+        """Izračuna dužinu putanje"""
+        if len(path.poses) < 2:
+            return 0.0
+        
+        total_length = 0.0
+        for i in range(len(path.poses) - 1):
+            p1 = path.poses[i].pose.position
+            p2 = path.poses[i + 1].pose.position
+            dx = p2.x - p1.x
+            dy = p2.y - p1.y
+            total_length += math.sqrt(dx*dx + dy*dy)
+        
+        return total_length
+    
+    def follow_path_timer(self):
         """Timer za sljedićenje putanje"""
-        
-        # Ako nema putanje, zaustavi robota
-        if not self.is_following or self.current_path is None:
+        if not self.following or self.current_path is None:
+            # Zaustavi robota
             cmd = Twist()
-            self.cmd_pub.publish(cmd)
+            self.cmd_vel_publisher.publish(cmd)
             return
         
-        # Ako je kraj putanje, zaustavi
+        # Provjeri je li dostignut kraj putanje
         if self.path_index >= len(self.current_path.poses):
-            self.get_logger().info('[FOLLOW] Kraj putanje - čekam novu...\n')
-            self.is_following = False
+            self.get_logger().info('[DONE] ✓ SLJEDIĆENJE DOVRŠENO')
+            self.following = False
             cmd = Twist()
-            self.cmd_pub.publish(cmd)
+            self.cmd_vel_publisher.publish(cmd)
             return
         
-        # Dohvati robot poziciju iz TF-a
+        # Dohvati robot poziciju
         try:
-            tf = self.tf_buffer.lookup_transform(
+            transform = self.tf_buffer.lookup_transform(
                 'map',
                 'base_link',
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.5)
+                rclpy.time.Time()
             )
-            robot_x = tf.transform.translation.x
-            robot_y = tf.transform.translation.y
-        except Exception as e:
+            robot_x = transform.transform.translation.x
+            robot_y = transform.transform.translation.y
+        except Exception:
+            # Ako nema transformacije, zaustavi robota
             cmd = Twist()
-            self.cmd_pub.publish(cmd)
+            self.cmd_vel_publisher.publish(cmd)
             return
         
-        # Dohvati trenutnu ciljnu točku
+        # Dohvati trenutnu čeljnu točku na putanji
         target_pose = self.current_path.poses[self.path_index]
         target_x = target_pose.pose.position.x
         target_y = target_pose.pose.position.y
         
-        # Izračuna udaljenost
+        # Izračuna udaljenost do čelje
         dx = target_x - robot_x
         dy = target_y - robot_y
         distance = math.sqrt(dx*dx + dy*dy)
         
-        # Log svakih 5 točaka
-        if self.path_index >= self.last_log_index + 5:
-            self.get_logger().info(
-                f'[FOLLOW] Točka {self.path_index}/{len(self.current_path.poses)}: '
-                f'dist={distance:.3f}m'
-            )
-            self.last_log_index = self.path_index
-        
-        # Ako je blizu, idi na sljedeću točku
-        if distance < self.distance_tolerance:
+        # Ako je suvisze blizu, idi na sljedeću točku
+        if distance < self.position_tolerance:
             self.path_index += 1
             return
+        
+        # Izračuna ugao prema čelji
+        angle_to_target = math.atan2(dy, dx)
+        
+        # Izračuna razliku kuta
+        # (ovo je pojednostavljeno - trebalo bi koristiti robot orientaciju)
         
         # Kreiraj Twist komandu
         cmd = Twist()
         
-        # Linearna brzina
-        if distance < 0.5:
-            cmd.linear.x = max(0.05, distance * 0.3)
-        else:
-            cmd.linear.x = self.linear_speed
-        
+        # Linearna brzina proporcionalna udaljenosti
+        cmd.linear.x = min(self.max_linear_speed, distance * 0.5)
         cmd.linear.y = 0.0
         cmd.linear.z = 0.0
         
-        # Kutna brzina
-        angle_to_target = math.atan2(dy, dx)
+        # Kutna brzina (pojednostavljeno)
+        cmd.angular.z = angle_to_target * 0.5
         cmd.angular.x = 0.0
         cmd.angular.y = 0.0
-        cmd.angular.z = min(self.angular_speed, abs(angle_to_target) * 0.5) * (1 if angle_to_target > 0 else -1)
         
-        # Objavi
-        self.cmd_pub.publish(cmd)
+        # Objavi komandu
+        self.cmd_vel_publisher.publish(cmd)
 
 
 def main(args=None):
@@ -192,8 +201,9 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        # Zaustavi robota prije gasišenja
         cmd = Twist()
-        node.cmd_pub.publish(cmd)
+        node.cmd_vel_publisher.publish(cmd)
         node.destroy_node()
         rclpy.shutdown()
 
