@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Navigation Launch File - SAMO Nav2 Navigacija
-Ova datoteka pokreće SAMO:
+Navigation Launch File - MINIMALIST
+SAMO:
 - A* Path Planner
-- Nav2 komponente (kontroler, planer, BT, smoother)
+- Nav2 Controller Server (DWB)
+- Nav2 Velocity Smoother
 - Nav2 Adapter
 
-NE pokreće: Stage, AMCL, RViz (oni se pokreću odvojeno)
+BEZ: BT Navigator, Planner Server, Lifecycle Manager (komplicirani)
 
 Redoslijed pokretanja:
 1. Terminal 1: Stage simulator - ros2 launch student_assignment_02 stage_launch.py
@@ -24,7 +25,7 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
-    """Launch file za A* + Nav2 navigaciju (bez Stage/AMCL/RViz)"""
+    """Launch file - SAMO A* + Nav2 Controller"""
     
     # Paket direktorij
     student_pkg_dir = get_package_share_directory('student_assignment_02')
@@ -69,38 +70,7 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 2. NAV2 LIFECYCLE MANAGER
-    # =====================================================================
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
-        output='screen',
-        parameters=[
-            {'use_sim_time': LaunchConfiguration('use_sim_time')},
-            {'autostart': True},
-            {'node_names': [
-                'controller_server',
-                'planner_server',
-                'behavior_tree_navigator',
-                'velocity_smoother'
-            ]},
-        ],
-    )
-    
-    # =====================================================================
-    # 3. NAV2 PLANNER SERVER (globalni planer)
-    # =====================================================================
-    planner_server = Node(
-        package='nav2_planner',
-        executable='planner_server',
-        name='planner_server',
-        output='screen',
-        parameters=[nav2_params_file],
-    )
-    
-    # =====================================================================
-    # 4. NAV2 CONTROLLER SERVER (lokalni planer - GLAVNI)
+    # 2. NAV2 CONTROLLER SERVER (DWB - lokalni planer)
     # =====================================================================
     controller_server = Node(
         package='nav2_controller',
@@ -111,18 +81,7 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 5. NAV2 BEHAVIOR TREE NAVIGATOR
-    # =====================================================================
-    bt_navigator = Node(
-        package='nav2_bt_navigator',
-        executable='bt_navigator',
-        name='bt_navigator',
-        output='screen',
-        parameters=[nav2_params_file],
-    )
-    
-    # =====================================================================
-    # 6. NAV2 VELOCITY SMOOTHER
+    # 3. NAV2 VELOCITY SMOOTHER (glatče zapovijedane brzine)
     # =====================================================================
     velocity_smoother = Node(
         package='nav2_velocity_smoother',
@@ -133,7 +92,7 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 7. NAV2 ADAPTER NODE
+    # 4. NAV2 ADAPTER NODE
     # Hvata /planned_path od A* planera i šalje je Nav2 FollowPath akciji
     # =====================================================================
     nav2_adapter_node = Node(
@@ -158,16 +117,11 @@ def generate_launch_description():
         # 1. Prvo A* planer
         astar_node,
         
-        # 2. Zatim lifecycle manager
-        lifecycle_manager,
-        
-        # 3. Nav2 komponente
-        planner_server,
+        # 2. Nav2 komponente (samo potrebne)
         controller_server,
         velocity_smoother,
-        bt_navigator,
         
-        # 4. Adapter koji povezuje A* s Nav2
+        # 3. Adapter koji povezuje A* s Nav2
         nav2_adapter_node,
     ])
     
