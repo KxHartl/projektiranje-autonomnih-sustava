@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Navigation Launch File - SAMO A* PATH PLANNER + NAV2 ADAPTER
+Navigation Launch File - SAMO A* + PATH FOLLOWER
 
-BEZ SVEGA DRUGOG!
+Koristi nove SIMPLE nodove koje su pisane od nule
 """
 
 import os
@@ -18,34 +18,31 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     
     # =====================================================================
-    # A* PATH PLANNER NODE
+    # SIMPLE A* PATH PLANNER
     # =====================================================================
     astar_planner = Node(
         package='student_assignment_02',
-        executable='astar_path_planner',
-        name='a_star_path_planner',
+        executable='simple_astar_planner',
+        name='simple_astar_planner',
         output='screen',
         parameters=[
             {'use_sim_time': use_sim_time},
-            {'allow_diagonal': True},
-            {'inflation_distance_m': 0.5},
-            {'max_iterations': 50000},
         ]
     )
     
     # =====================================================================
-    # NAV2 ADAPTER NODE
+    # SIMPLE PATH FOLLOWER
     # =====================================================================
-    nav2_adapter = Node(
+    path_follower = Node(
         package='student_assignment_02',
-        executable='nav2_adapter',
-        name='nav2_adapter',
+        executable='simple_path_follower',
+        name='simple_path_follower',
         output='screen',
         parameters=[
             {'use_sim_time': use_sim_time},
             {'linear_speed': 0.3},
             {'angular_speed': 1.0},
-            {'distance_tolerance': 0.15},
+            {'distance_tolerance': 0.1},
         ]
     )
     
@@ -62,8 +59,8 @@ def generate_launch_description():
         # A* planer - planira putanju
         astar_planner,
         
-        # Nav2 adapter - sljedi putanju
-        nav2_adapter,
+        # Path follower - sljedi putanju
+        path_follower,
     ])
     
     return ld
