@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Nav2 Adapter Node - Sljedi putanju i zaustavlja se na cilju
+Nav2 Adapter Node - ZAMRZAVA putanju tijekom sljedićenja
 
 FIX:
 1. Sluša /planned_path (od A* planera)
-2. SVE POZICIJE U MAP FRAMEU
-3. Direktno sljedi putanju
-4. Šalje /cmd_vel komande robotu
-5. ZAUSTAVLJA SE NA CILJU
-6. Praći svaki korak
+2. ZAMRZAVA putanju kada počne sljedićenje
+3. Ne prima nove putanje dok sljedićenje ne bude gotovo
+4. SVE POZICIJE U MAP FRAMEU
+5. Šalje /cmd_vel komande robotu
+6. ZAUSTAVLJA SE NA CILJU
 """
 
 import rclpy
@@ -20,7 +20,7 @@ import math
 
 
 class Nav2Adapter(Node):
-    """Adapter koji sljedi putanju i zaustavlja se na cilju"""
+    """Adapter koji sljedi zamrznutu putanju"""
     
     def __init__(self):
         super().__init__('nav2_adapter')
@@ -30,6 +30,7 @@ class Nav2Adapter(Node):
             '\n[NAV2 ADAPTER] Inicijalizacija' +
             '\n- Sluša: /planned_path (od A* planera)' +
             '\n- Šalje: /cmd_vel (robotu)' +
+            '\n- ZAMRZAVA putanju tijekom sljedićenja' +
             '\n- SVE U MAP FRAMEU' +
             '\n- PRATI PUTANJU I ZAUSTAVLJA SE' +
             '\n' + '='*80 + '\n'
@@ -63,6 +64,7 @@ class Nav2Adapter(Node):
         self.is_following = False
         self.goal_reached = False
         self.last_log_index = -5
+        self.path_frozen = False  # NOVO: Zamrzavanje putanje
         
         # Parametri
         self.declare_parameter('linear_speed', 0.3)
@@ -87,16 +89,42 @@ class Nav2Adapter(Node):
     
     def path_callback(self, msg: Path):
         """Primanje putanje od A* planera"""
+        
+        # NOVO: Ako je putanja zamrznutina, ne primaj nove!
+        if self.path_frozen and self.is_following:
+            self.get_logger().debug(
+                '[PATH] Nova putanja primljena ALI je zamrznutina - zanemarujem!'
+            )
+            return
+        
         if len(msg.poses) == 0:
             self.get_logger().warn('[PATH] Prazna putanja!')
             self.is_following = False
             return
         
+        # Primjena nove putanje
         self.current_path = msg
         self.path_index = 0
         self.is_following = True
         self.goal_reached = False
+        self.path_frozen = True  # NOVO: Zamrzni putanju!
         self.last_log_index = -5
+        
+        # Ispis putanje (za debugging)
+        self.get_logger().info(
+            f'[PATH] Primljena putanja: {len(msg.poses)} točaka, frame={msg.header.frame_id}'
+        )
+        
+        # Ispis koordinata prve i zadnje točke
+        if len(msg.poses) > 0:
+            first = msg.poses[0]
+            last = msg.poses[-1]
+            self.get_logger().info(
+                f'[PATH] Start: ({first.pose.position.x:.2f}, {first.pose.position.y:.2f})'
+            )
+            self.get_logger().info(
+                f'[PATH] Goal:  ({last.pose.position.x:.2f}, {last.pose.position.y:.2f})'
+            )
         
         # Izračuna dužinu
         total_length = 0.0
@@ -108,8 +136,7 @@ class Nav2Adapter(Node):
             total_length += math.sqrt(dx*dx + dy*dy)
         
         self.get_logger().info(
-            f'[PATH] Primljena putanja: {len(msg.poses)} točaka, '
-            f'dužina {total_length:.2f}m, frame={msg.header.frame_id}'
+            f'[PATH] Dužina: {total_length:.2f}m (zamrznutina putanja)'
         )
         self.get_logger().info('[FOLLOW] Počinjem sljedićenje putanje...\n')
     
@@ -125,8 +152,10 @@ class Nav2Adapter(Node):
         # Ako je kraj putanje, zaustavi
         if self.path_index >= len(self.current_path.poses):
             if not self.goal_reached:
-                self.get_logger().info('[DONE] Putanja završena! Robot zaustavljen.\n')
+                self.get_logger().info('[DONE] Putanja završena! Robot zaustavljen.')
+                self.get_logger().info('[READY] Spremam za novu putanju...\n')
                 self.goal_reached = True
+                self.path_frozen = False  # NOVO: Odmrzni za novu putanju!
             self.is_following = False
             cmd = Twist()
             self.cmd_pub.publish(cmd)
@@ -143,12 +172,11 @@ class Nav2Adapter(Node):
             robot_x = tf.transform.translation.x
             robot_y = tf.transform.translation.y
         except Exception as e:
-            # self.get_logger().error(f'[TF] Lookup failed: {type(e).__name__}')
             cmd = Twist()
             self.cmd_pub.publish(cmd)
             return
         
-        # Dohvati trenutnu ciljnu točku
+        # Dohvati trenutnu ciljnu točku iz ZAMRZNUTINE putanje
         target_pose = self.current_path.poses[self.path_index]
         target_x = target_pose.pose.position.x
         target_y = target_pose.pose.position.y
