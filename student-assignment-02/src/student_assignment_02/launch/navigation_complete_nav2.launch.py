@@ -4,23 +4,23 @@ Navigation Complete with Nav2 Launch File
 Integrira A* global path planning s Nav2 lokalnim planerom
 Nav2 automatski sljedi putanju generirane A* planaterom
 Za korištenje: ros2 launch student_assignment_02 navigation_complete_nav2.launch.py
+
+NAPOMENA: 2D Goal Pose iz RViza će automatski pokrenuti A* planiranje
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
-    """Launch file za A* planiranje putanje s Nav2 localnim planerom"""
+    """Launch file za A* planiranje putanje s Nav2 lokalnim planerom"""
     
     # Paket direktorij
     student_pkg_dir = get_package_share_directory('student_assignment_02')
-    nav2_bringup_dir = get_package_share_directory('nav2_bringup')
     
     # Konfiguracija datoteke
     nav2_params_file = os.path.join(student_pkg_dir, 'config', 'nav2_params.yaml')
@@ -33,17 +33,6 @@ def generate_launch_description():
         'use_sim_time',
         default_value='true',
         description='Koristi simulacijsko vrijeme'
-    )
-    
-    goal_x_arg = DeclareLaunchArgument(
-        'goal_x',
-        default_value='5.0',
-        description='Goal X koordinata (m)'
-    )
-    goal_y_arg = DeclareLaunchArgument(
-        'goal_y',
-        default_value='5.0',
-        description='Goal Y koordinata (m)'
     )
     
     inflation_distance_arg = DeclareLaunchArgument(
@@ -63,8 +52,9 @@ def generate_launch_description():
         parameters=[
             {
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
-                'goal_x': LaunchConfiguration('goal_x'),
-                'goal_y': LaunchConfiguration('goal_y'),
+                # Goal se postavlj iz RViza (2D Goal Pose)
+                'goal_x': 5.0,
+                'goal_y': 5.0,
                 'start_x': 0.0,
                 'start_y': 0.0,
                 'allow_diagonal': True,
@@ -78,30 +68,73 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 2. NAV2 BRINGUP - Kompletna Nav2 stack
+    # 2. NAV2 LIFECYCLE MANAGER
     # =====================================================================
-    # Nav2 sadrži:
-    # - planner_server (globalni planer)
-    # - controller_server (lokalni planer - DWB, Regulated Pure Pursuit itd.)
-    # - lifecycle_manager
-    # - behavior_tree_navigator
-    # - velocity_smoother
-    nav2_bringup = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(nav2_bringup_dir, 'launch', 'bringup_launch.py')
-        ),
-        launch_arguments={
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'slam': 'False',  # Trebamo mapu, nije SLAM
-            'params_file': nav2_params_file,
-        }.items(),
+    lifecycle_manager = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_navigation',
+        output='screen',
+        parameters=[
+            {'use_sim_time': LaunchConfiguration('use_sim_time')},
+            {'autostart': True},
+            {'node_names': [
+                'controller_server',
+                'planner_server',
+                'behavior_tree_navigator',
+                'velocity_smoother'
+            ]},
+        ],
     )
     
     # =====================================================================
-    # 3. NAV2 TO A* ADAPTER NODE
+    # 3. NAV2 PLANNER SERVER (globalni planer - koristi Nav2 default)
     # =====================================================================
-    # Ovaj čvor hvata putanju od A* planera i slanje je Nav2
-    # kao global plan (umjesto korištenja Nav2 planner_server-a)
+    planner_server = Node(
+        package='nav2_planner',
+        executable='planner_server',
+        name='planner_server',
+        output='screen',
+        parameters=[nav2_params_file],
+    )
+    
+    # =====================================================================
+    # 4. NAV2 CONTROLLER SERVER (lokalni planer - GLAVNI KONTROLER)
+    # =====================================================================
+    controller_server = Node(
+        package='nav2_controller',
+        executable='controller_server',
+        name='controller_server',
+        output='screen',
+        parameters=[nav2_params_file],
+    )
+    
+    # =====================================================================
+    # 5. NAV2 BEHAVIOR TREE NAVIGATOR
+    # =====================================================================
+    bt_navigator = Node(
+        package='nav2_bt_navigator',
+        executable='bt_navigator',
+        name='bt_navigator',
+        output='screen',
+        parameters=[nav2_params_file],
+    )
+    
+    # =====================================================================
+    # 6. NAV2 VELOCITY SMOOTHER
+    # =====================================================================
+    velocity_smoother = Node(
+        package='nav2_velocity_smoother',
+        executable='velocity_smoother',
+        name='velocity_smoother',
+        output='screen',
+        parameters=[nav2_params_file],
+    )
+    
+    # =====================================================================
+    # 7. NAV2 ADAPTER NODE
+    # =====================================================================
+    # Ovaj čvor hvata putanju od A* planera i šalje je Nav2
     nav2_adapter_node = Node(
         package='student_assignment_02',
         executable='nav2_adapter',
@@ -118,7 +151,7 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 4. RViz2 - VIZUALIZACIJA
+    # 8. RViz2 - VIZUALIZACIJA
     # =====================================================================
     rviz_node = Node(
         package='rviz2',
@@ -137,14 +170,23 @@ def generate_launch_description():
     ld = LaunchDescription([
         # Argumenti
         use_sim_time_arg,
-        goal_x_arg,
-        goal_y_arg,
         inflation_distance_arg,
         
-        # Čvorovi
+        # Čvorovi - redoslijed je bitan!
+        # 1. Prvo lifecycle manager
+        lifecycle_manager,
+        
+        # 2. Nav2 komponente
+        planner_server,
+        controller_server,
+        velocity_smoother,
+        bt_navigator,
+        
+        # 3. A* planer i adapter
         astar_node,
-        nav2_bringup,
-        nav2_adapter_node,  # Adapter koji povezuje A* s Nav2
+        nav2_adapter_node,
+        
+        # 4. RViz za vizualizaciju
         rviz_node,
     ])
     
