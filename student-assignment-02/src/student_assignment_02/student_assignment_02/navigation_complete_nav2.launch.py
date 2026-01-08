@@ -3,7 +3,10 @@
 Navigation Launch File - Kompletna Nav2 + A* + Adapter
 Klassic DWB Controller + Navigation
 
-FIX: Dodan Lifecycle Manager koji aktivira controller_server!
+KRITIČNO FIX: Dodan Lifecycle Manager koji aktivira controller_server!
+
+PROBLEM: Bez Lifecycle Managera, controller_server ostaje u WAITING stanju.
+RJEŠENJE: nav2_lifecycle_manager automatski aktivira sve servere.
 """
 
 import os
@@ -19,8 +22,9 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     
     # =====================================================================
-    # LIFECYCLE MANAGER - AKTIVIRA CONTROLLER_SERVER!
+    # LIFECYCLE MANAGER - AKTIVIRA CONTROLLER_SERVER I COSTMAP!
     # =====================================================================
+    # OVO JE KLJUČNO! Bez ovoga, controller_server čeka aktivaciju ZAUVIJEK!
     lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager_standalone',
@@ -28,14 +32,15 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'use_sim_time': use_sim_time},
-            {'autostart': True},  # KLJUČNO: automatski pokreće
+            {'autostart': True},  # KLJUČNO: automatski pokreće sve
             {'node_names': ['controller_server', 'local_costmap']},
         ]
     )
     
     # =====================================================================
-    # LOCAL COSTMAP
+    # LOCAL COSTMAP - MAPIRA OKOLIS
     # =====================================================================
+    # Local costmap se koristi za lokalno izbjegavanje prepreka
     local_costmap = Node(
         package='nav2_costmap_2d',
         executable='costmap_2d_node',
@@ -60,6 +65,8 @@ def generate_launch_description():
     # =====================================================================
     # CONTROLLER SERVER - DWB CONTROLLER
     # =====================================================================
+    # OVO STVARA /follow_path akciju koju koristi nav2_adapter!
+    # KLJUČNO: Lifecycle Manager ga aktivira!
     controller_server = Node(
         package='nav2_controller',
         executable='controller_server',
@@ -160,7 +167,7 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # A* PATH PLANNER
+    # A* PATH PLANNER NODE
     # =====================================================================
     astar_planner = Node(
         package='student_assignment_02',
@@ -174,8 +181,9 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # NAV2 ADAPTER
+    # NAV2 ADAPTER NODE
     # =====================================================================
+    # Povezuje A* putanju s Nav2 FollowPath akcijom
     nav2_adapter = Node(
         package='student_assignment_02',
         executable='nav2_adapter_node',
@@ -196,8 +204,8 @@ def generate_launch_description():
             description='Koristi simulacijsko vrijeme'
         ),
         
-        # REDOSLIJED JE VAŽAN!
-        # 1. Lifecycle manager - aktivira servere
+        # REDOSLIJED JE KRITIČAN!
+        # 1. Lifecycle manager - MORA biti prvi!
         lifecycle_manager,
         
         # 2. Local costmap
