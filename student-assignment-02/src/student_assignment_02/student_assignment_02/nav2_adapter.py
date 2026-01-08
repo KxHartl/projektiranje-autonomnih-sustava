@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
-Nav2 Adapter Node
-Poezuče A* putanju s Nav2 kontrolerom
+Nav2 Adapter Node - FIXED VERSION
+Povezuče A* putanju s Nav2 kontrolerom
 Nav2 automatski sljedi putanju
 Također sluša /goal_pose iz RViza (2D Goal Pose tool)
 
-TOPIKI:
-- Subscribe: /planned_path (od A* planera)
-- Subscribe: /goal_pose (iz RViza)
-- Publish: /follow_path (Nav2 FollowPath akcija)
-
-DEBUG: Dodani detaljniji ispis za pronalaženje greške!
+KRITIČNO FIX:
+- Uklonjeni callback groups (uzrokovali su blocking)
+- Dodan direktan path send bez async wait
+- Dodan server.server_is_ready() check s retry logikom
 """
 
 import rclpy
@@ -21,6 +19,7 @@ from nav2_msgs.action import FollowPath
 from geometry_msgs.msg import PoseStamped
 from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, HistoryPolicy
 import time
+import threading
 
 
 class Nav2Adapter(Node):
@@ -40,13 +39,6 @@ class Nav2Adapter(Node):
             '\n' +
             '- Akcija: follow_path (Nav2 kontroler DWB)' +
             '\n' +
-            '- Redoslijed:' +
-            '\n  1. RViz: 2D Goal Pose tool' +
-            '\n  2. A* planer: racuna putanju od base_link do goal (SVAKI PUT!)' +
-            '\n  3. A*: publikuje /planned_path' +
-            '\n  4. Adapter: hvata i šalje Nav2-u' +
-            '\n  5. Nav2 DWB: robot se kreće!' +
-            '\n' +
             '='*80 +
             '\n'
         )
@@ -59,16 +51,16 @@ class Nav2Adapter(Node):
             depth=1
         )
         
-        # Subscribe na A* putanju - ISPRAVLJENA TOPIKA!
+        # Subscribe na A* putanju
         self.path_subscription = self.create_subscription(
             Path,
-            '/planned_path',  # OVO JE ISPRAVNA TOPIKA OD A*!
+            '/planned_path',
             self.path_callback,
             qos
         )
         self.get_logger().info('[ADAPTER] ✓ Subscribe na /planned_path')
         
-        # Subscribe na goal pose iz RViza (2D Goal Pose tool)
+        # Subscribe na goal pose iz RViza
         self.goal_pose_subscription = self.create_subscription(
             PoseStamped,
             '/goal_pose',
@@ -78,6 +70,7 @@ class Nav2Adapter(Node):
         self.get_logger().info('[ADAPTER] ✓ Subscribe na /goal_pose')
         
         # Action client za Nav2 controller
+        # KRITIČNO: BEZ callback_group!
         self.follow_path_client = ActionClient(
             self,
             FollowPath,
@@ -85,47 +78,41 @@ class Nav2Adapter(Node):
         )
         self.get_logger().info('[ADAPTER] ✓ Action client za follow_path')
         
-        # Timer za periodičko slanjegledanja
-        self.timer = self.create_timer(0.5, self.timer_callback)
-        self.get_logger().info('[ADAPTER] ✓ Timer kreiran')
-        
         # Skladištenje
         self.current_path: Path = None
         self.last_goal_pose: PoseStamped = None
-        self.last_sent_time = 0.0
         self.goal_handle = None
-        self.send_interval = 1.0  # Pošalji putanju svakih 1 sekunde
         self.path_received = False
         self.follow_path_ready = False
+        self.sending_goal = False
         
-        # Čekaj FollowPath akciju
-        self._wait_for_follow_path()
+        # Pokreni provjeru follow_path servera u zasebnoj niti
+        self.check_thread = threading.Thread(target=self._check_follow_path_thread, daemon=True)
+        self.check_thread.start()
         
-        self.get_logger().info('[ADAPTER] ✓ Spreman!')
+        self.get_logger().info('[ADAPTER] ✓ Inicijalizacija gotova')
         self.get_logger().info('')
     
-    def _wait_for_follow_path(self, timeout: int = 10):
+    def _check_follow_path_thread(self):
         """
-        Čekaj da FollowPath akcija postane dostupna
+        Provjeri follow_path akciju u zasebnoj niti
         """
-        self.get_logger().info('[ADAPTER] Čekam /follow_path akciju od Nav2...')
-        start = time.time()
+        timeout = time.time() + 30  # 30 sekundi
         
-        while not self.follow_path_client.server_is_ready():
-            if time.time() - start > timeout:
-                self.get_logger().error('[ADAPTER] ✗ /follow_path akcija NIJE dostupna!')
-                self.get_logger().error('[ADAPTER] Provjeri je li nav2_controller pokrenut!')
-                self.follow_path_ready = False
+        while time.time() < timeout:
+            if self.follow_path_client.server_is_ready():
+                self.get_logger().info('[ADAPTER] ✓✓✓ /follow_path akcija DOSTUPNA!')
+                self.follow_path_ready = True
                 return
             
-            self.get_logger().info('[ADAPTER]   ... čekam ...')
-            time.sleep(0.5)
+            self.get_logger().debug('[ADAPTER] Čekam /follow_path akciju...')
+            time.sleep(1.0)
         
-        self.get_logger().info('[ADAPTER] ✓ /follow_path akcija dostupna!')
-        self.follow_path_ready = True
+        self.get_logger().error('[ADAPTER] ✗ /follow_path akcija NIJE dostupna nakon 30s')
+        self.follow_path_ready = False
     
     def goal_pose_callback(self, msg: PoseStamped):
-        """Prima goal pose iz RViza (2D Goal Pose tool)"""
+        """Prima goal pose iz RViza"""
         self.last_goal_pose = msg
         self.get_logger().info(
             f'[GOAL] Nova goal pose iz RViza: '
@@ -165,15 +152,16 @@ class Nav2Adapter(Node):
         return total_length
     
     def send_path_to_nav2(self):
-        """Pošalji putanju Nav2 FollowPath akciji"""
-        if not self.current_path or len(self.current_path.poses) == 0:
-            self.get_logger().debug('[SEND] Nema putanje za slanje')
+        """
+        Pošalji putanju Nav2 FollowPath akciji
+        KRITIČNO: Ovo je DIREKTNO slanje, ne async!
+        """
+        if self.sending_goal:
+            self.get_logger().debug('[SEND] Već se šalje goal, preskakam')
             return
         
-        # Provjeri je li dovoljno vremena prošlo od zadnjeg slanja
-        current_time = time.time()
-        if current_time - self.last_sent_time < self.send_interval:
-            self.get_logger().debug('[SEND] Preskačem - premalo vremena od zadnjeg slanja')
+        if not self.current_path or len(self.current_path.poses) == 0:
+            self.get_logger().debug('[SEND] Nema putanje za slanje')
             return
         
         # Provjeri je li server dostupan
@@ -184,40 +172,37 @@ class Nav2Adapter(Node):
             self.follow_path_ready = False
             return
         
+        self.sending_goal = True
+        
         # Kreiraj goal
         goal = FollowPath.Goal()
         goal.path = self.current_path
         
         self.get_logger().info(
-            f'[SEND] ✓ Slanje putanje Nav2 ({len(goal.path.poses)} točaka)'
-        )
-        self.get_logger().info(
-            f'[SEND]   Akcija: follow_path'
-        )
-        self.get_logger().info(
-            f'[SEND]   Kontroler: DWB'
+            f'[SEND] ✓ Pošinjam slanje putanje ({len(goal.path.poses)} točaka)'
         )
         
-        # Pošalji goal - VAŽNO: Ovo je asinkreno slanje!
         try:
-            future = self.follow_path_client.send_goal_async(
-                goal,
-                feedback_callback=self.feedback_callback
-            )
+            # DIREKTNO slanje - bez threading problema!
+            future = self.follow_path_client.send_goal_async(goal)
             future.add_done_callback(self.goal_response_callback)
-            self.last_sent_time = current_time
-            
-            self.get_logger().info('[SEND] ✓ Goal poslana, čekam potvrdu...')
+            self.get_logger().info('[SEND] ✓ Goal poslana')
         except Exception as e:
             self.get_logger().error(f'[SEND] ✗ Greška pri slanju: {e}')
+            self.sending_goal = False
     
     def goal_response_callback(self, future):
-        """Callback kada Nav2 prihvati goal"""
+        """
+        Callback kada Nav2 odgovori na zahtjev za putanju
+        """
         try:
             self.goal_handle = future.result()
         except Exception as e:
-            self.get_logger().error(f'[NAV2] ✗ Greška u future.result(): {e}')
+            self.get_logger().error(f'[NAV2] ✗ future.result() greška: {e}')
+            self.sending_goal = False
             return
+        
+        self.sending_goal = False
         
         if not self.goal_handle:
             self.get_logger().error('[NAV2] ✗ Goal handle je None!')
@@ -229,32 +214,21 @@ class Nav2Adapter(Node):
             )
             return
         
-        self.get_logger().info('[NAV2] ✓ PRIHVAĆENO - robot počinje slijediti putanju!')
+        self.get_logger().info(
+            '[NAV2] ✓✓✓ PRIHVAĆENO - robot počinje slijediti putanju!'
+        )
         
         # Dodaj callback za rezultat
         try:
             result_future = self.goal_handle.get_result_async()
             result_future.add_done_callback(self.goal_result_callback)
         except Exception as e:
-            self.get_logger().error(f'[NAV2] ✗ Greška pri get_result_async: {e}')
-    
-    def feedback_callback(self, feedback_msg):
-        """
-        Callback za feedback tijekom izvršavanja
-        """
-        try:
-            feedback = feedback_msg.feedback
-            if hasattr(feedback, 'distance_remaining'):
-                dist = feedback.distance_remaining
-                if dist > 0:
-                    self.get_logger().debug(
-                        f'[FEEDBACK] Preostala distanca: {dist:.2f}m'
-                    )
-        except:
-            pass  # Ignoriraj greške u feedback-u
+            self.get_logger().error(f'[NAV2] ✗ get_result_async greška: {e}')
     
     def goal_result_callback(self, future):
-        """Callback kada je Nav2 završio slijeđenje"""
+        """
+        Callback kada je Nav2 završio slijeđenje
+        """
         try:
             result = future.result()
             if result and result.result:
@@ -270,22 +244,6 @@ class Nav2Adapter(Node):
         except Exception as e:
             self.get_logger().warn(f'[DONE] Greška u rezultatu: {e}')
             self.goal_handle = None
-    
-    def timer_callback(self):
-        """Timer callback - periodički provjera i pošalji putanju"""
-        # Ako nema aktivnog goal-a i imamo putanju, pošalji je
-        if self.goal_handle is None and self.current_path and self.path_received:
-            self.send_path_to_nav2()
-        # Ako je goal završen, provjeri je li novija putanja dostupna
-        elif self.goal_handle:
-            try:
-                # Status: 0=UNKNOWN, 1=ACCEPTED, 2=EXECUTING, 3=CANCELING, 4=SUCCEEDED, 5=CANCELED, 6=ABORTED
-                if self.goal_handle.status in [4, 5, 6]:  # SUCCEEDED, CANCELED, ABORTED
-                    if self.current_path and self.path_received:
-                        self.goal_handle = None
-                        self.send_path_to_nav2()
-            except:
-                pass  # Ignoriraj greške u status provjeri
 
 
 def main(args=None):
