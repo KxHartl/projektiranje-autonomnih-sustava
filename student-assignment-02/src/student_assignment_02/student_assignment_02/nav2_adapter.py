@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Nav2 Adapter Node - ZAMRZAVA putanju tijekom sljedićenja
+Nav2 Adapter Node - Sljedi putanju
 
 FIX:
 1. Sluša /planned_path (od A* planera)
-2. ZAMRZAVA putanju kada počne sljedićenje
-3. Ne prima nove putanje dok sljedićenje ne bude gotovo
-4. SVE POZICIJE U MAP FRAMEU
-5. Šalje /cmd_vel komande robotu
-6. ZAUSTAVLJA SE NA CILJU
+2. SVE POZICIJE U MAP FRAMEU
+3. Direktno sljedi putanju
+4. Šalje /cmd_vel komande robotu
+5. ZAUSTAVLJA SE NA CILJU
+6. PRIMAJ NOVE PUTANJE - KONTINUIRNA REPLANIRANJE
 """
 
 import rclpy
@@ -20,7 +20,7 @@ import math
 
 
 class Nav2Adapter(Node):
-    """Adapter koji sljedi zamrznutu putanju"""
+    """Adapter koji sljedi putanju - kontinuirna replaniranje"""
     
     def __init__(self):
         super().__init__('nav2_adapter')
@@ -30,7 +30,7 @@ class Nav2Adapter(Node):
             '\n[NAV2 ADAPTER] Inicijalizacija' +
             '\n- Sluša: /planned_path (od A* planera)' +
             '\n- Šalje: /cmd_vel (robotu)' +
-            '\n- ZAMRZAVA putanju tijekom sljedićenja' +
+            '\n- KONTINUIRNA REPLANIRANJE OD ROBOT POZICIJE' +
             '\n- SVE U MAP FRAMEU' +
             '\n- PRATI PUTANJU I ZAUSTAVLJA SE' +
             '\n' + '='*80 + '\n'
@@ -62,25 +62,20 @@ class Nav2Adapter(Node):
         self.current_path = None
         self.path_index = 0
         self.is_following = False
-        self.goal_reached = False
         self.last_log_index = -5
-        self.path_frozen = False  # NOVO: Zamrzavanje putanje
         
         # Parametri
         self.declare_parameter('linear_speed', 0.3)
         self.declare_parameter('angular_speed', 1.0)
         self.declare_parameter('distance_tolerance', 0.15)
-        self.declare_parameter('goal_tolerance', 0.2)
         
         self.linear_speed = self.get_parameter('linear_speed').value
         self.angular_speed = self.get_parameter('angular_speed').value
         self.distance_tolerance = self.get_parameter('distance_tolerance').value
-        self.goal_tolerance = self.get_parameter('goal_tolerance').value
         
         self.get_logger().info(
             f'[INIT] Parametri: linear={self.linear_speed}m/s, '
-            f'angular={self.angular_speed}rad/s, distance_tol={self.distance_tolerance}m, '
-            f'goal_tol={self.goal_tolerance}m'
+            f'angular={self.angular_speed}rad/s, tol={self.distance_tolerance}m'
         )
         
         # Timer za sljedićenje
@@ -89,56 +84,28 @@ class Nav2Adapter(Node):
     
     def path_callback(self, msg: Path):
         """Primanje putanje od A* planera"""
-        
-        # NOVO: Ako je putanja zamrznutina, ne primaj nove!
-        if self.path_frozen and self.is_following:
-            self.get_logger().debug(
-                '[PATH] Nova putanja primljena ALI je zamrznutina - zanemarujem!'
-            )
-            return
-        
         if len(msg.poses) == 0:
             self.get_logger().warn('[PATH] Prazna putanja!')
-            self.is_following = False
             return
         
-        # Primjena nove putanje
+        # Primjena nove putanje - KONTINUIRNO!
         self.current_path = msg
-        self.path_index = 0
+        self.path_index = 0  # RESTART od početka nove putanje
         self.is_following = True
-        self.goal_reached = False
-        self.path_frozen = True  # NOVO: Zamrzni putanju!
         self.last_log_index = -5
         
-        # Ispis putanje (za debugging)
+        # Ispis putanje
         self.get_logger().info(
-            f'[PATH] Primljena putanja: {len(msg.poses)} točaka, frame={msg.header.frame_id}'
+            f'[PATH] Nova putanja: {len(msg.poses)} točaka, frame={msg.header.frame_id}'
         )
         
-        # Ispis koordinata prve i zadnje točke
         if len(msg.poses) > 0:
             first = msg.poses[0]
             last = msg.poses[-1]
-            self.get_logger().info(
-                f'[PATH] Start: ({first.pose.position.x:.2f}, {first.pose.position.y:.2f})'
+            self.get_logger().debug(
+                f'[PATH] Start: ({first.pose.position.x:.2f}, {first.pose.position.y:.2f}), '
+                f'Goal: ({last.pose.position.x:.2f}, {last.pose.position.y:.2f})'
             )
-            self.get_logger().info(
-                f'[PATH] Goal:  ({last.pose.position.x:.2f}, {last.pose.position.y:.2f})'
-            )
-        
-        # Izračuna dužinu
-        total_length = 0.0
-        for i in range(len(msg.poses) - 1):
-            p1 = msg.poses[i].pose.position
-            p2 = msg.poses[i + 1].pose.position
-            dx = p2.x - p1.x
-            dy = p2.y - p1.y
-            total_length += math.sqrt(dx*dx + dy*dy)
-        
-        self.get_logger().info(
-            f'[PATH] Dužina: {total_length:.2f}m (zamrznutina putanja)'
-        )
-        self.get_logger().info('[FOLLOW] Počinjem sljedićenje putanje...\n')
     
     def follow_timer(self):
         """Timer za sljedićenje putanje"""
@@ -151,11 +118,7 @@ class Nav2Adapter(Node):
         
         # Ako je kraj putanje, zaustavi
         if self.path_index >= len(self.current_path.poses):
-            if not self.goal_reached:
-                self.get_logger().info('[DONE] Putanja završena! Robot zaustavljen.')
-                self.get_logger().info('[READY] Spremam za novu putanju...\n')
-                self.goal_reached = True
-                self.path_frozen = False  # NOVO: Odmrzni za novu putanju!
+            self.get_logger().info('[FOLLOW] Kraj putanje - čekam novu...\n')
             self.is_following = False
             cmd = Twist()
             self.cmd_pub.publish(cmd)
@@ -176,7 +139,7 @@ class Nav2Adapter(Node):
             self.cmd_pub.publish(cmd)
             return
         
-        # Dohvati trenutnu ciljnu točku iz ZAMRZNUTINE putanje
+        # Dohvati trenutnu ciljnu točku
         target_pose = self.current_path.poses[self.path_index]
         target_x = target_pose.pose.position.x
         target_y = target_pose.pose.position.y
@@ -190,8 +153,6 @@ class Nav2Adapter(Node):
         if self.path_index >= self.last_log_index + 5:
             self.get_logger().info(
                 f'[FOLLOW] Točka {self.path_index}/{len(self.current_path.poses)}: '
-                f'robot=({robot_x:.2f},{robot_y:.2f}), '
-                f'target=({target_x:.2f},{target_y:.2f}), '
                 f'dist={distance:.3f}m'
             )
             self.last_log_index = self.path_index
@@ -204,8 +165,7 @@ class Nav2Adapter(Node):
         # Kreiraj Twist komandu
         cmd = Twist()
         
-        # Linearna brzina: proporcionalno udaljenosti
-        # Usporavanje blizu cilja
+        # Linearna brzina
         if distance < 0.5:
             cmd.linear.x = max(0.05, distance * 0.3)
         else:
@@ -214,12 +174,8 @@ class Nav2Adapter(Node):
         cmd.linear.y = 0.0
         cmd.linear.z = 0.0
         
-        # Kutna brzina: rotacija prema cilju
-        # atan2 (dy, dx) je kut prema cilju
+        # Kutna brzina
         angle_to_target = math.atan2(dy, dx)
-        
-        # Kutna brzina proporcionalno kut razlici
-        # Ograniči da ne bude prevelika
         cmd.angular.x = 0.0
         cmd.angular.y = 0.0
         cmd.angular.z = min(self.angular_speed, abs(angle_to_target) * 0.5) * (1 if angle_to_target > 0 else -1)
@@ -236,7 +192,6 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # Zaustavi robota
         cmd = Twist()
         node.cmd_pub.publish(cmd)
         node.destroy_node()
