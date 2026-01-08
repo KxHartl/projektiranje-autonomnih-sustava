@@ -80,6 +80,8 @@ setup(
             'goal_navigation_node = student_assignment_02.goal_navigation_node:main',
             'path_follower = student_assignment_02.path_follower_node:main',
             'nav2_adapter = student_assignment_02.nav2_adapter:main',
+            'simple_astar_planner = student_assignment_02.simple_astar_planner:main',
+            'simple_path_follower = student_assignment_02.simple_path_follower:main',
         ],
     },
 )
