@@ -140,26 +140,6 @@ def generate_launch_description():
     )
     
     # =====================================================================
-    # 3. RViz2 - VIZUALIZACIJA
-    # =====================================================================
-    # Kreira RViz config ako postoji
-    rviz_config_file = os.path.join(student_pkg_dir, 'config', 'navigation.rviz')
-    
-    # Ako config ne postoji, koristi defaults
-    if not os.path.exists(rviz_config_file):
-        rviz_config_file = None
-    
-    rviz_args = ['-d', rviz_config_file] if rviz_config_file else []
-    
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=rviz_args,
-    )
-    
-    # =====================================================================
     # 4. LAUNCH DESCRIPTION
     # =====================================================================
     ld = LaunchDescription([
@@ -179,7 +159,6 @@ def generate_launch_description():
         # Čvorovi
         astar_node,
         path_follower_node,  # Path follower aktiviran!
-        rviz_node,
     ])
     
     return ld
