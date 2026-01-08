@@ -4,6 +4,11 @@ Nav2 Adapter Node
 Povezuče A* putanju s Nav2 kontrolerom
 Nav2 automatski sljedi putanju
 Takođe sluša /goal_pose iz RViza (2D Goal Pose tool)
+
+TOPIKI:
+- Subscribe: /planned_path (od A* planera)
+- Subscribe: /goal_pose (iz RViza)
+- Publish: /follow_path (Nav2 FollowPath akcija)
 """
 
 import rclpy
@@ -30,10 +35,10 @@ class Nav2Adapter(Node):
             depth=1
         )
         
-        # Subscribe na A* putanju
+        # Subscribe na A* putanju - ISPRAVLJENA TOPIKA!
         self.path_subscription = self.create_subscription(
             Path,
-            'astar_path',
+            '/planned_path',  # OVO JE ISPRAVNA TOPIKA OD A*!
             self.path_callback,
             qos
         )
@@ -53,13 +58,6 @@ class Nav2Adapter(Node):
             'follow_path'
         )
         
-        # Publisher za goal koja se prosleđuje A*-u
-        self.astar_goal_publisher = self.create_publisher(
-            PoseStamped,
-            '/a_star_goal',
-            10
-        )
-        
         # Timer za periodičko slanjegledanja
         self.timer = self.create_timer(0.5, self.timer_callback)
         
@@ -73,15 +71,23 @@ class Nav2Adapter(Node):
         
         self.get_logger().info(
             '\n' +
-            '='*60 +
-            '\nNav2 Adapter inicijaliziran\n' +
-            '- Slusa na /astar_path od A* planera\n' +
-            '- Slusa na /goal_pose iz RViza (2D Goal Pose tool)\n' +
-            '- Koristi Nav2 FollowPath akciju za sljenje\n' +
-            '\nKorak 1: Postavite GOAL u RViz-u (2D Goal Pose)\n' +
-            'Korak 2: A* planira putanju\n' +
-            'Korak 3: Nav2 automatski sljedi putanju\n' +
-            '='*60 +
+            '='*70 +
+            '\nNav2 Adapter inicijaliziran' +
+            '\n' +
+            '- Sluša: /planned_path (od A* planera)' +
+            '\n' +
+            '- Sluša: /goal_pose (iz RViza - 2D Goal Pose tool)' +
+            '\n' +
+            '- Akcija: follow_path (Nav2 kontroler)' +
+            '\n' +
+            '- Redoslijed:' +
+            '\n  1. RViz: 2D Goal Pose tool' +
+            '\n  2. A* planer: racuna putanju od base_link do goal' +
+            '\n  3. A*: publikuje /planned_path' +
+            '\n  4. Adapter: hvata i šalje Nav2-u' +
+            '\n  5. Nav2: robot se kreće!' +
+            '\n' +
+            '='*70 +
             '\n'
         )
     
@@ -89,12 +95,9 @@ class Nav2Adapter(Node):
         """Prima goal pose iz RViza (2D Goal Pose tool)"""
         self.last_goal_pose = msg
         self.get_logger().info(
-            f'\n>>> NOVA GOAL POSE iz RViza: '
+            f'>>> NOVA GOAL POSE iz RViza: '
             f'({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f})'
         )
-        
-        # Proslijedi goal A* planeru na /a_star_goal
-        self.astar_goal_publisher.publish(msg)
     
     def path_callback(self, msg: Path):
         """Prima putanju od A* planera"""
@@ -102,13 +105,13 @@ class Nav2Adapter(Node):
             self.current_path = msg
             self.path_received = True
             self.get_logger().info(
-                f'\n>>> A* PUTANJA PRIMLJENA: {len(msg.poses)} točaka, '
+                f'>>> A* PUTANJA PRIMLJENA: {len(msg.poses)} točaka, '
                 f'dužina: {self.calculate_path_length(msg):.2f}m'
             )
             # Odmah pošalji Nav2-u
             self.send_path_to_nav2()
         else:
-            self.get_logger().warn('\n>>> A* PUTANJA JE PRAZNA!')
+            self.get_logger().warn('>>> A* PUTANJA JE PRAZNA!')
     
     def calculate_path_length(self, path: Path) -> float:
         """Izračuna duljinu putanje"""
@@ -146,7 +149,7 @@ class Nav2Adapter(Node):
         
         # Pošalji goal
         self.get_logger().info(
-            f'\n>>> SLANJE PUTANJE NAV2 ({len(goal.path.poses)} točaka)'
+            f'>>> SLANJE PUTANJE NAV2 ({len(goal.path.poses)} točaka)'
         )
         future = self.follow_path_client.send_goal_async(goal)
         future.add_done_callback(self.goal_response_callback)
@@ -158,10 +161,10 @@ class Nav2Adapter(Node):
         self.goal_handle = future.result()
         
         if not self.goal_handle.accepted:
-            self.get_logger().error('\n>>> Nav2 FollowPath goal ODBIJEN')
+            self.get_logger().error('>>> Nav2 FollowPath goal ODBIJEN')
             return
         
-        self.get_logger().info('\n>>> Nav2 FollowPath goal PRIHVAĆEN - ROBOT SE KREĆE!')
+        self.get_logger().info('>>> Nav2 FollowPath goal PRIHVAĆEN - ROBOT SE KREĆE!')
         
         # Dodaj callback za rezultat
         result_future = self.goal_handle.get_result_async()
@@ -169,16 +172,18 @@ class Nav2Adapter(Node):
     
     def goal_result_callback(self, future):
         """Callback kada je Nav2 završio slijeđenje"""
-        result = future.result().result
-        
-        if result:
-            self.get_logger().info(
-                '\n>>> SLJENJE DOVRŠENO - ROBOT JE STIGAO NA CILJ!'
-            )
-        else:
-            self.get_logger().warn(
-                '\n>>> SLJENJE PREKINUTO - Postavite novi GOAL u RViz-u'
-            )
+        try:
+            result = future.result()
+            if result and result.result:
+                self.get_logger().info(
+                    '>>> SLJENJE DOVRŠENO - ROBOT JE STIGAO NA CILJ!'
+                )
+            else:
+                self.get_logger().warn(
+                    '>>> SLJENJE PREKINUTO ili nije dostupno'
+                )
+        except Exception as e:
+            self.get_logger().warn(f'>>> Greška u rezultatu: {e}')
     
     def timer_callback(self):
         """Timer callback - periodički provjera i pošalji putanju"""
