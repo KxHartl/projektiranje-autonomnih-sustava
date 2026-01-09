@@ -110,7 +110,7 @@ Otvori novi terminal:
 cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
-ros2 run turtlebot3_teleop teleop_keyboard
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
 **Trebali biste vidjeti**: Poruka "Publishing twist"
