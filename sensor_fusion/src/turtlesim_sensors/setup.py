@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 import os
 from glob import glob
 
-package_name = 'turtlesim_sensors_template'
+package_name = 'turtlesim_sensors'
 
 setup(
     name=package_name,
@@ -31,8 +31,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'positioning_system = turtlesim_sensors_template.positioning_system:main',
-            'odometry = turtlesim_sensors_template.odometry:main',
+            'positioning_system = turtlesim_sensors.positioning_system:main',
+            'odometry = turtlesim_sensors.odometry:main',
         ],
     },
 )
