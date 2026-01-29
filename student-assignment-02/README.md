@@ -1,58 +1,58 @@
 # 🤖 STUDENT ASSIGNMENT 02 - A* Path Planning
 
-**Mapiranje (SLAM) → Lokalizacija (AMCL) → Path Planning (A*)**
+**Mapping (SLAM) → Localization (AMCL) → Path Planning (A*)**
 
-Kompletna implementacija autonomous robotike. Ovaj README vodi vas korak po korak od početka do kraja.
+Complete implementation of autonomous robotics. This README guides you step by step from start to finish.
 
-> ⚠️ **VAŽNO**: Pažljivo slijedite sve korake redom. Ako nešto ne radi, pogledajte [Troubleshooting](#troubleshooting).
+> ⚠️ **IMPORTANT**: Carefully follow all steps in order. If something doesn't work, see [Troubleshooting](#troubleshooting).
 
 ---
 
-## 📋 Sadržaj
+## 📋 Table of Contents
 
-1. [Preduvjeti](#preduvjeti)
-2. [Instalacija](#instalacija--prvi-put-)
-3. [Korak 1: Mapiranje](#korak-1-mapiranje)
-4. [Korak 2: Lokalizacija](#korak-2-lokalizacija)
-5. [Korak 3: A* Path Planning](#korak-3-a-path-planning)
-6. [Parametri](#parametri)
+1. [Prerequisites](#prerequisites)
+2. [Installation](#installation--first-time-)
+3. [Step 1: Mapping](#step-1-mapping)
+4. [Step 2: Localization](#step-2-localization)
+5. [Step 3: A* Path Planning](#step-3-a-path-planning)
+6. [Parameters](#parameters)
 7. [Troubleshooting](#troubleshooting)
 
 ---
 
-## 📦 Preduvjeti
+## 📦 Prerequisites
 
-Provjerite da imate:
+Verify that you have:
 
 ```bash
 ros2 --version
 ```
 
-Trebalo bi vidjeti: `ROS 2 Humble ...`
+You should see: `ROS 2 Humble ...`
 
-Ako nemate ROS 2 Humble instaliran, [pratite službenu instalaciju](https://docs.ros.org/en/humble/Installation.html).
+If you don't have ROS 2 Humble installed, [follow the official installation guide](https://docs.ros.org/en/humble/Installation.html).
 
 ---
 
-## 🔧 Instalacija (PRVI PUT)
+## 🔧 Installation (FIRST TIME)
 
-### Korak 1: Clone Repository
+### Step 1: Clone Repository
 
 ```bash
-# Kreiraj direktorij gdje će biti projekt
-mkdir -p ~/zadaca_02_ws
-cd ~/zadaca_02_ws
+# Create a directory for the project
+mkdir -p ~/assignment_02_ws
+cd ~/assignment_02_ws
 
 # Clone repository
 git clone https://github.com/KxHartl/projektiranje-autonomnih-sustava.git
 
-# Idi u folder zadaće
+# Navigate to the assignment folder
 cd projektiranje-autonomnih-sustava/student-assignment-02
 ```
 
-**Trebalo bi biti**:
+**Expected structure**:
 ```
-~/zadaca_02_ws/
+~/assignment_02_ws/
 └── projektiranje-autonomnih-sustava/
     └── student-assignment-02/
         ├── src/
@@ -61,228 +61,228 @@ cd projektiranje-autonomnih-sustava/student-assignment-02
         └── ...
 ```
 
-### Korak 2: Build Projekt
+### Step 2: Build Project
 
 ```bash
-# Sigurno si u student-assignment-02 direktoriju
+# Make sure you're in the student-assignment-02 directory
 pwd
-# Trebalo bi: .../student-assignment-02
+# Should output: .../student-assignment-02
 
-# Očisti stare build datoteke
+# Clean old build files
 rm -rf build/ install/ log/
 
-# Gradi projekt
+# Build the project
 colcon build --symlink-install
 ```
 
-### Korak 3: Source Setup
+### Step 3: Source Setup
 
 ```bash
-# Učitaj environment
+# Load the environment
 source install/setup.bash
 
-**✅ INSTALACIJA GOTOVA!**
+**✅ INSTALLATION COMPLETE!**
 ```
 
 
-### 🗺️ KORAK 1: Mapiranje
+### 🗺️ STEP 1: Mapping
 
-**Cilj**: Mapirati okruženje pomo­ću SLAM Toolbox-a
+**Goal**: Map the environment using SLAM Toolbox
 
 ### 1.1 Terminal 1: SLAM Mapping
 
-Otvori novi terminal:
+Open a new terminal:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 launch student_assignment_02 mapping_complete_launch.py
 ```
 
-**Trebali biste vidjeti**: RViz prozor s mapom kako se gradi.
+**You should see**: RViz window with the map being built.
 
-### 1.2 Terminal 2: Upravljanje Robotom
+### 1.2 Terminal 2: Robot Control
 
-Otvori novi terminal:
+Open a new terminal:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
-**Trebali biste vidjeti**: Poruka "Publishing twist"
+**You should see**: Message "Publishing twist"
 
-**Cilj**: Voziš robota po čitavom okruženju da SLAM mapira sve.
+**Goal**: Drive the robot throughout the entire environment so SLAM can map everything.
 
-**Savjet**: Vozite u U-obliku, pokrivajući sve zidove i kutove.
+**Tip**: Drive in a U-shape pattern, covering all walls and corners.
 
-### 1.3 Terminal 3: Spremi Mapu
+### 1.3 Terminal 3: Save Map
 
-Otvori novi terminal:
+Open a new terminal:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 
-# Provjeri koji je broj zadnje mape
+# Check the number of the last map
 ls src/student_assignment_02/mapped_maps/
 ```
 
-Vidjećete nešto kao:
+You will see something like:
 ```
 map_01  map_02  map_03  map_04
 ```
 
-Ako je zadnja `map_04`, spremi kao `map_05`.
+If the last one is `map_04`, save as `map_05`.
 
-**Sada spremi mapu** (zamijeni USERNAME sa tvojim korisničkim imenom - provjeri s `whoami`):
+**Now save the map** (replace USERNAME with your username - check with `whoami`):
 
 ```bash
-# Prvo provjeri svoje korisničko ime
+# First check your username
 whoami
 ```
 
-Ako se javlja `hartl`, onda komanda je:
+If the output is `hartl`, then the command is:
 
 ```bash
 ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \
   "name:
-    data: '/home/hartl/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02/src/student_assignment_02/mapped_maps/map_05/map_05'"
+    data: '/home/hartl/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02/src/student_assignment_02/mapped_maps/map_05/map_05'"
 ```
 
-> ⚠️ **VAŽNO**: Zamijeni `hartl` sa rezultatom `whoami` komande!
+> ⚠️ **IMPORTANT**: Replace `hartl` with the result of the `whoami` command!
 
-**Trebali biste vidjeti**: Poruka "Map saved successfully"
+**You should see**: Message "Map saved successfully"
 
-### 1.4 Provjera Sprema Mape
+### 1.4 Verify Map Save
 
-U istom terminalu:
+In the same terminal:
 
 ```bash
 ls -la src/student_assignment_02/mapped_maps/map_05/
 ```
 
-Trebalo bi biti:
+You should see:
 ```
-map_05.pgm   (slika mape)
-map_05.yaml  (metapodaci)
+map_05.pgm   (map image)
+map_05.yaml  (metadata)
 ```
 
-**Ako vidite ove datoteke: ✅ MAPIRANJE GOTOVO!**
+**If you see these files: ✅ MAPPING COMPLETE!**
 
-### 1.5 Zaustavi Simulatore
+### 1.5 Stop Simulators
 
-U sve terminale, pritisnite **CTRL+C** da zaustaviš sve.
+In all terminals, press **CTRL+C** to stop everything.
 
 ---
 
-## 📍 KORAK 2: Lokalizacija
+## 📍 STEP 2: Localization
 
-**Cilj**: Lokalizirati robota s AMCL koristeći spremljenu mapu
+**Goal**: Localize the robot with AMCL using the saved map
 
-### 2.1 Terminal 1: Lokalizacija
+### 2.1 Terminal 1: Localization
 
-Otvori novi terminal:
+Open a new terminal:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
-# Zamijeni map_02 s brojem vaše mape ako je drugačiji!
+# Replace map_02 with your map number if different!
 ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_02
 ```
 
-**Trebali biste vidjeti**: RViz s mapom 
+**You should see**: RViz with the map 
 
-### 2.2 Terminal 2: Upravljanje Robotom
+### 2.2 Terminal 2: Robot Control
 
-Otvori novi terminal:
+Open a new terminal:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 run turtlebot3_teleop teleop_keyboard
 ```
 
-**VA­ŽNO**: Pokrenite robota s **I** tipkom nekoliko puta!
+**IMPORTANT**: Move the robot with the **I** key several times!
 
 
-**✅ LOKALIZACIJA GOTOVA!**
+**✅ LOCALIZATION COMPLETE!**
 
 
-## 🎯 KORAK 3: A* Path Planning
+## 🎯 STEP 3: A* Path Planning
 
-**Cilj**: Planirati putanju s A* algoritmom
+**Goal**: Plan a path using the A* algorithm
 
 ### 3.1 Terminal 1: A* Path Planner
 
-Otvori novi terminal:
+Open a new terminal:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
 ros2 launch student_assignment_02 a_star_path_planner.launch.py
 ```
 
-**Trebali biste vidjeti**:
+**You should see**:
 ```
 [INFO] A* Path Planner Node: Started
 [INFO] Inflation distance: 0.5m
-[INFO] Koristi base_link za početnu točku
+[INFO] Using base_link for starting point
 ```
-### 3.6 Postavljanje Cilja
+### 3.6 Setting the Goal
 
-**U RViz-u**:
+**In RViz**:
 
-1. U gornjoj toolbaru, kliknite na **2D Goal Pose** (zeleni strelica s crvendim ciljnom točkom)
-2. Kliknite na mapu gdje trebate cilj
-3. Povucite miš malo da postavite smjer
-4. Otpustite miš
+1. In the top toolbar, click on **2D Goal Pose** (green arrow with red target point)
+2. Click on the map where you want the goal
+3. Drag the mouse slightly to set the direction
+4. Release the mouse
 
-**Trebalo bi se desiti**: 
-- 🟢 **Zelena linija** se pojavljuje (to je vaša putanja!)
-- 🟠 **Narančasti kubici** pokazuju buffer (0.5 m od zidova)
-- 🔴 **Sive sfere** pokazuju istraživane stanice
-- 🟡 **Žute sfere** pokazuju čelnu frontu algoritma
+**Expected result**: 
+- 🟢 **Green line** appears (this is your path!)
+- 🟠 **Orange cubes** show the buffer (0.5 m from walls)
+- 🔴 **Gray spheres** show explored nodes
+- 🟡 **Yellow spheres** show the algorithm's frontier
 
-**Trebali biste vidjeti poruku u terminalu 3**:
+**You should see a message in terminal 3**:
 ```
 [INFO] Path found! Length: XX nodes
 [INFO] Path planning took X.XX seconds
 ```
 
-**✅ A* PATH PLANNING GOTOVO!**
+**✅ A* PATH PLANNING COMPLETE!**
 
-### 3.7 Pokušajte Više Cilja
+### 3.7 Try Multiple Goals
 
-Možete kliknuti na različite lokacije na mapi i svaki put će se putanja replanirati!
+You can click on different locations on the map and the path will be replanned each time!
 
 ---
 
-## ⚙️ Parametri
+## ⚙️ Parameters
 
-### Promjena Mape
+### Changing the Map
 
-Ako trebate koristiti drugačiju mapu (npr. map_04):
+If you need to use a different map (e.g., map_04):
 
 ```bash
 ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_04
 ```
 
-### A* Path Planner - Custom Parametri
+### A* Path Planner - Custom Parameters
 
 ```bash
-# Primjer: Manji buffer (0.15 m umjesto 0.5 m)
+# Example: Smaller buffer (0.15 m instead of 0.5 m)
 ros2 launch student_assignment_02 a_star_path_planner.launch.py inflation_distance_m:=0.15
 
-# Primjer: Više iteracija
+# Example: More iterations
 ros2 launch student_assignment_02 a_star_path_planner.launch.py max_iterations:=100000
 
-# Primjer: Bez dijagonalnog kretanja
+# Example: Without diagonal movement
 ros2 launch student_assignment_02 a_star_path_planner.launch.py allow_diagonal:=false
 ```
 
@@ -290,94 +290,94 @@ ros2 launch student_assignment_02 a_star_path_planner.launch.py allow_diagonal:=
 
 ## 🔍 Troubleshooting
 
-### Problem: "Command not found" za `ros2 launch`
+### Problem: "Command not found" for `ros2 launch`
 
-**Rješenje**: Trebate source-ati setup:
+**Solution**: You need to source the setup:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 ```
 
-### Problem: "CMake Error" tijekom build-a
+### Problem: "CMake Error" during build
 
-**Rješenje**: Očisti i pokušaj ponovno:
+**Solution**: Clean and try again:
 
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 rm -rf build/ install/ log/
 colcon build --packages-select student_assignment_02 --symlink-install
 ```
 
-### Problem: Mapa se ne sprema
+### Problem: Map is not saving
 
-**Trebalo bi**: Vidjeti poruku "Map saved successfully"
+**Expected**: See message "Map saved successfully"
 
-**Ako ne vidite**: Provjerite je li SLAM Toolbox pokrenut:
+**If you don't see it**: Check if SLAM Toolbox is running:
 
 ```bash
 ros2 topic list | grep slam
 ```
 
-Trebalo bi vidjeti `/slam_toolbox/...` topic-e.
+You should see `/slam_toolbox/...` topics.
 
-### Problem: Putanja nije pronađena
+### Problem: Path not found
 
-**Trebalo bi**: Trebali biste vidjeti zelenu liniju u RViz-u.
+**Expected**: You should see a green line in RViz.
 
-**Ako ne vidite**:
-1. Provjerite da je start pozicija validna (robot u slobodnoj zoni)
-2. Provjerite da je cilj validan (kliknite u slobodnu zonu)
-3. Pove­čajte `max_iterations`:
+**If you don't see it**:
+1. Check that the start position is valid (robot in free space)
+2. Check that the goal is valid (click in free space)
+3. Increase `max_iterations`:
    ```bash
    ros2 launch student_assignment_02 a_star_path_planner.launch.py max_iterations:=100000
    ```
 
-### Problem: RViz ne prikazuje mapu
+### Problem: RViz doesn't show the map
 
-**Trebalo bi**: Vidjeti mapu kao grid.
+**Expected**: See the map as a grid.
 
-**Ako ne vidite**:
-1. Provjerite da je Fixed Frame postavljen na `map`
-2. Dodajte `/map` kao OccupancyGrid
-3. Provjerite je li `/map` topic dostupan:
+**If you don't see it**:
+1. Check that Fixed Frame is set to `map`
+2. Add `/map` as OccupancyGrid
+3. Check if `/map` topic is available:
    ```bash
    ros2 topic echo /map --once | head -20
    ```
 
-### Problem: Transformacija `base_link` ne postoji
+### Problem: Transform `base_link` doesn't exist
 
-**Trebalo bi**: `ros2 run tf2_ros tf2_echo map base_link` pokazuje koordinate.
+**Expected**: `ros2 run tf2_ros tf2_echo map base_link` shows coordinates.
 
-**Ako se javlja greška**:
-1. Provjerite je li lokalizacija pokrenut
-2. Vozite robota više
-3. Provjerite TF tree:
+**If you get an error**:
+1. Check if localization is running
+2. Move the robot more
+3. Check the TF tree:
    ```bash
    ros2 run tf2_tools view_frames
    ```
 
-### Problem: Trebam stari kod/mapu
+### Problem: Need old code/map
 
-**Stari kod**: GitHub history:
+**Old code**: GitHub history:
 ```bash
-cd ~/zadaca_02_ws/projektiranje-autonomnih-sustava
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava
 git log --oneline
 ```
 
-**Stara mapa**: U `src/student_assignment_02/mapped_maps/` direktoriju su sve mape.
+**Old map**: All maps are in the `src/student_assignment_02/mapped_maps/` directory.
 
 ---
 
 ## 📊 Monitoring & Debug
 
-### Provjera Svih Aktivnih Čvorova
+### Check All Active Nodes
 
 ```bash
 ros2 node list
 ```
 
-Trebalo bi vidjeti:
+You should see:
 ```
 /a_star_path_planner
 /amcl
@@ -386,19 +386,19 @@ Trebalo bi vidjeti:
 ...
 ```
 
-### Provjera Svih Topic-a
+### Check All Topics
 
 ```bash
 ros2 topic list
 ```
 
-### Ispis Putanje (Live)
+### Print Path (Live)
 
 ```bash
 ros2 topic echo /planned_path
 ```
 
-### Ispis Mape (Live)
+### Print Map (Live)
 
 ```bash
 ros2 topic echo /map --once
@@ -406,67 +406,67 @@ ros2 topic echo /map --once
 
 ---
 
-## 📁 Direktorij Struktura
+## 📁 Directory Structure
 
 ```
-~/zadaca_02_ws/
+~/assignment_02_ws/
 └── projektiranje-autonomnih-sustava/
     └── student-assignment-02/
         ├── src/student_assignment_02/
         │   ├── student_assignment_02/
-        │   │   ├── a_star_path_planner.py     ← Glavni kod
+        │   │   ├── a_star_path_planner.py     ← Main code
         │   │   ├── map_republisher.py
         │   │   └── ...
         │   ├── launch/
-        │   │   ├── mapping_complete_launch.py       ← Mapiranje
-        │   │   ├── localization_complete_launch.py  ← Lokalizacija
-        │   │   └── a_star_path_planner.launch.py    ← A* Planer
+        │   │   ├── mapping_complete_launch.py       ← Mapping
+        │   │   ├── localization_complete_launch.py  ← Localization
+        │   │   └── a_star_path_planner.launch.py    ← A* Planner
         │   ├── mapped_maps/
         │   │   ├── map_01/
-        │   │   ├── map_05/        ← NOVA MAPA
+        │   │   ├── map_05/        ← NEW MAP
         │   │   └── ...
         │   ├── config/
         │   └── setup.py
-        ├── README.md              ← OVI FAJL
+        ├── README.md              ← THIS FILE
         └── ...
 ```
 ---
 
-## 📚 Dodatne Informacije
+## 📚 Additional Information
 
-### ROS 2 Dokumentacija
+### ROS 2 Documentation
 - [ROS 2 Humble](https://docs.ros.org/en/humble/)
 - [TurtleBot3](https://emanual.robotis.com/docs/en/platform/turtlebot3/overview/)
 
-### Algoritmi
+### Algorithms
 - [A* Search](https://en.wikipedia.org/wiki/A*_search_algorithm)
 - [SLAM](https://en.wikipedia.org/wiki/Simultaneous_localization_and_mapping)
-- [AMCL Lokalizacija](https://wiki.ros.org/amcl)
+- [AMCL Localization](https://wiki.ros.org/amcl)
 
-### Simulatori
+### Simulators
 - [Stage ROS2](https://github.com/ros-simulation/stage_ros2)
 
 ---
 
-## 👨‍💻 Autor
+## 👨‍💻 Author
 
 **Kresimir Hartl** (KxHartl)  
-Fakultet Strojarstva i Brodogradnje, Zagreb  
-Sječanj 2026.
+Faculty of Mechanical Engineering and Naval Architecture, Zagreb  
+January 2026
 
 ---
 
-## 📞 Podrška
+## 📞 Support
 
-Ako trebate pomoć:
+If you need help:
 
-1. Provjerite [Troubleshooting](#troubleshooting) sekciju
-2. Provjerite [ROS 2 dokumentaciju](https://docs.ros.org/en/humble/)
-3. Otvorite GitHub issue: [Issues](https://github.com/KxHartl/projektiranje-autonomnih-sustava/issues)
+1. Check the [Troubleshooting](#troubleshooting) section
+2. Check the [ROS 2 documentation](https://docs.ros.org/en/humble/)
+3. Open a GitHub issue: [Issues](https://github.com/KxHartl/projektiranje-autonomnih-sustava/issues)
 
 ---
 
-**Status**: ✅ GOTOVO  
-**Verzija**: 1.1.0  
-**Datum**: 7. siječnja 2026.  
-**Zadnja Izmjena**: 7. siječnja 2026.
+**Status**: ✅ COMPLETE  
+**Version**: 1.1.0  
+**Date**: January 7, 2026  
+**Last Modified**: January 7, 2026
