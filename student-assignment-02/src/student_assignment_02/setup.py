@@ -74,6 +74,7 @@ setup(
     entry_points={
         'console_scripts': [
             'a_star_path_planner = student_assignment_02.a_star_path_planner:main',
+            'astar_path_planner = student_assignment_02.a_star_path_planner:main',
             'd_star_path_planner = student_assignment_02.d_star_path_planner:main',
             'map_republisher = student_assignment_02.map_republisher:main',
             'path_planning_node = student_assignment_02.path_planning_node:main',
