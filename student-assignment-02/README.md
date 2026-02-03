@@ -137,6 +137,14 @@ map_01  map_02  map_03  map_04
 
 If the last one is `map_04`, save as `map_05`.
 
+Open a new terminal:
+
+```bash
+cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02/src/student_assignment_02/mapped_maps/
+
+mkdir map_05
+```
+
 **Now save the map** (replace USERNAME with your username - check with `whoami`):
 
 ```bash
