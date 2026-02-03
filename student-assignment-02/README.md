@@ -204,7 +204,7 @@ Open a new terminal:
 cd ~/assignment_02_ws/projektiranje-autonomnih-sustava/student-assignment-02
 source install/setup.bash
 
-ros2 run turtlebot3_teleop teleop_keyboard
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
 **IMPORTANT**: Move the robot with the **I** key several times!
