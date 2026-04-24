@@ -1,0 +1,48 @@
+# AI-Human Collaborative Workspace GitIgnore
+
+# ================================================================
+# SOURCES: Veliki podatkovni fajlovi — ignorirani, docs se prate
+# ================================================================
+sources/data/*
+!sources/data/.gitkeep
+
+# ================================================================
+# AI AGENT: Pratimo history i context, ignoriramo privremene fajlove
+# ================================================================
+.agent/cache/
+.agent/temp/
+.agent/sessions/
+*.agent.log
+
+# ================================================================
+# STANDARD DEVELOPMENT (ROS2, Python, Node)
+# ================================================================
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.DS_Store
+
+# Build outputi
+dist/
+build/
+install/
+log/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# ROS2 specifično
+*.bag
+*.db3
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# ================================================================
+# GIT: Pratimo .human/ po defaultu, ignoriraj samo ako trebaš privatnost
+# ================================================================
+# .human/private/

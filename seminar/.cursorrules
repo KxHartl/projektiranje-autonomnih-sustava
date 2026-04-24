@@ -1,0 +1,21 @@
+# Cursor Agent — Project Instructions
+
+## Obavezan Početak Sesije
+Pročitaj sljedeće datoteke PRIJE nego što napišeš ijedan redak koda:
+1. `.agent/config/session_bootstrap.md` — minimalni read-order
+2. `.agent/instructions.md` — core direktive
+3. `.agent/context/knowledge_base.md` — stanje projekta
+4. `task/backlog.md` — što treba napraviti
+5. `task/original_task.md` — nepromjenjivi cilj
+6. `sources/docs/index.md` — indeks izvora
+
+## Cursor-specifična pravila
+- Ne koristi automatski refactoring bez eksplicitnog odobrenja
+- Koristiti Composer za multi-file promjene
+- Svaka nova datoteka mora biti registrirana u `task/backlog.md`
+- Preferiraj agent mode za implementaciju, chat mode za pitanja
+- Ne čitaj `.agent/logs/prompt_log.md` osim kod audit zahtjeva
+- Primjenjuj `.agent/config/memory_rules.md`, `mcp_playbook.md`, `skills_playbook.md`
+
+## Ignoriraj u Indexu
+Ne indeksiraj: `sources/data/`, `.agent/logs/prompt_log.md`, `.human/`

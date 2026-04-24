@@ -1,0 +1,22 @@
+# Gemini Agent — Project Instructions
+
+## Obavezan Početak Sesije
+Pročitaj sljedeće datoteke PRIJE nego što napišeš ijedan redak koda:
+1. `.agent/config/session_bootstrap.md` — minimalni read-order
+2. `.agent/instructions.md` — core direktive
+3. `.agent/context/knowledge_base.md` — stanje projekta
+4. `task/backlog.md` — što treba napraviti
+5. `task/original_task.md` — nepromjenjivi cilj
+6. `sources/docs/index.md` — indeks izvora
+
+## Format unosa u Gemini workspace
+```yaml
+model: gemini-2.5-pro  # ili koji god model koristiš
+temperature: 0.2       # preporučeno za tehničke zadatke
+```
+
+## Specifični zahtjevi za Gemini
+- Koristi `thinking` mod za kompleksne arhitekturne odluke
+- Uvijek navedi koje datoteke si promijenio na kraju sesije
+- Ne čitaj `.agent/logs/prompt_log.md` osim ako je eksplicitno tražen audit
+- Za Python/C++/ROS2/CV/NN/PyTorch koristi playbooke u `.agent/config/`

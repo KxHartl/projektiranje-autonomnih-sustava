@@ -1,0 +1,21 @@
+# Cline / Roo-Code Agent — Project Instructions
+
+## Obavezan Početak Sesije
+Pročitaj sljedeće datoteke PRIJE nego što napišeš ijedan redak koda:
+1. `.agent/config/session_bootstrap.md` — minimalni read-order
+2. `.agent/instructions.md` — core direktive
+3. `.agent/context/knowledge_base.md` — stanje projekta
+4. `task/backlog.md` — što treba napraviti
+5. `task/original_task.md` — nepromjenjivi cilj
+6. `sources/docs/index.md` — indeks izvora
+
+## Cline-specifična pravila
+- Uvijek tražiti odobrenje prije izvršavanja shell naredbi koje mijenjaju stanje sustava
+- Koristiti `diff` prikaz za sve promjene datoteka
+- Ažurirati `task/backlog.md` na kraju svake sesije
+- Koristiti Claude Sonnet ili Opus za kompleksne zadatke, Haiku za simple editove
+- Ne čitati `.agent/logs/prompt_log.md` osim ako korisnik traži audit
+- Koristiti `.agent/config/memory_rules.md`, `mcp_playbook.md`, `skills_playbook.md`
+
+## MCP Tools
+Ako imaš pristup MCP alatima, koristi redoslijed iz `.agent/config/mcp_playbook.md`.
