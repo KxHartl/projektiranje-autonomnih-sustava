@@ -1,3 +1,23 @@
+# colcon / CMake build output
 **/build/
 **/install/
 **/log/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors and Office temp files
+*.swp
+*~
+~$*
+.DS_Store
+Thumbs.db
+
+# Course lecture slides and the assignment text belong to the teachers.
+# They stay on the local disk and are not published here.
+seminar/sources/docs/*.pdf
+seminar/sources/docs/**/*.pdf
+seminar/task/task.pdf
