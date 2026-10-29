@@ -14,7 +14,7 @@ set-up for an industrial arm, sensor fusion with an extended Kalman filter, and 
 localisation and path planning for a mobile robot.
 
 **The course's main project is a separate repository:
-[PAS-DUAL-ARM](https://github.com/KxHartl/PAS-DUAL-ARM)**, a simulated mobile manipulator with
+[pas-dual-arm](https://github.com/KxHartl/pas-dual-arm)**, a simulated mobile manipulator with
 two arms that drives to a box, lifts it with both arms and carries it to a marked spot in another
 room (ROS 2 Humble, Gazebo Fortress, Nav2, MoveIt).
 
