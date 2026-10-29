@@ -56,3 +56,7 @@ ros2 launch student_assignment_02 localization_complete_launch.py map_name:=map_
 # 3. A* path planning, next to the localisation
 ros2 launch student_assignment_02 a_star_path_planner.launch.py
 ```
+
+## License
+
+[Apache-2.0](LICENSE). It covers the author's own work in this repository. Third-party parts keep their own licences.
